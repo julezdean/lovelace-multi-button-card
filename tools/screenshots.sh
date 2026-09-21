@@ -61,5 +61,7 @@ shoot overview  "528,350"   overview
 shoot counts    "1840,612"  layout-counts 1
 shoot portrait  "408,622"   portrait
 shoot landscape "948,354"   landscape
+# Documents that the card honours the height a sections grid cell gives it.
+shoot constrained "1560,420" constrained
 
 echo "Done."

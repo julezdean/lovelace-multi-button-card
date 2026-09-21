@@ -16,7 +16,7 @@
  *   9. Registration
  */
 
-const CARD_VERSION = '1.0.0';
+const CARD_VERSION = '1.0.1';
 
 /**
  * The repository is prefixed, the card tag is not: the prefix groups the repo
@@ -526,6 +526,68 @@ function computeCellHeight(config, columns, width) {
   return Math.round(Math.max(min, Math.min(max, columnWidth / 1.25)));
 }
 
+/**
+ * Home Assistant's sections view lays cards out on a grid of fixed rows, so a
+ * card has to say how many rows it needs. These two numbers come from HA's own
+ * grid (2024.11+) and are the one place here that depends on HA internals -
+ * if they ever change, the card is merely sized generously or tightly, never
+ * broken.
+ */
+const HA_GRID_ROW_HEIGHT = 56;
+const HA_GRID_ROW_GAP = 8;
+
+/**
+ * The width of a full-width section column, used only to guess a sensible row
+ * count before the card has ever been measured. Being wrong here costs some
+ * slack above or below, not a broken layout: the host takes whatever height
+ * the cell gives it and the rows flex into it.
+ */
+const HA_SECTION_WIDTH = 480;
+
+/** Height in px that the card needs for `count` buttons at a given width. */
+function computeContentHeight(config, width) {
+  const padding = toNumber(config.appearance.padding, 14);
+  const gap = toNumber(config.layout.gap, 12);
+  const innerWidth = Math.max(0, width - padding * 2 - 2);
+
+  const weights = config.buttons.map((button) => button.weight);
+  const totalWeight = weights.reduce((sum, weight) => sum + weight, 0);
+  const columns = computeColumns(config, totalWeight, innerWidth);
+  const rows = partitionRows(weights, columns).length;
+  const cellHeight = computeCellHeight(config, columns, innerWidth);
+
+  const title = config.title ? 33 : 0; // font-size 15 * 1.2 + margins
+  return rows * cellHeight + (rows - 1) * gap + padding * 2 + 2 + title;
+}
+
+/** Translate a pixel height into whole sections-grid rows. */
+function pixelsToGridRows(height) {
+  return Math.max(1, Math.ceil((height + HA_GRID_ROW_GAP) / (HA_GRID_ROW_HEIGHT + HA_GRID_ROW_GAP)));
+}
+
+/**
+ * A button card wants room, so it asks for the full width of the section and
+ * for as many rows as its buttons actually need. The previous version guessed
+ * `rows * 2`, which gave two buttons 120px for the 200px they want - the card
+ * then overflowed its cell.
+ */
+function computeGridOptions(config) {
+  const needed = computeContentHeight(config, HA_SECTION_WIDTH);
+  // The floor uses min_button_size: below that the buttons stop being tappable,
+  // so the user should not be able to drag the card smaller than that either.
+  const floorConfig = {
+    ...config,
+    layout: { ...config.layout, max_button_size: config.layout.min_button_size },
+  };
+  const minimum = computeContentHeight(floorConfig, HA_SECTION_WIDTH);
+
+  return {
+    columns: 12,
+    rows: pixelsToGridRows(needed),
+    min_rows: pixelsToGridRows(minimum),
+  };
+}
+
 /* -------------------------------------------------------------------------- */
 /* 5. Animations                                                              */
 /* -------------------------------------------------------------------------- */
@@ -687,6 +749,11 @@ function haptic(node, type = 'light') {
 const STYLES = `
 :host {
   display: block;
+  /* The host must take the height it is given, or it silently falls back to
+     its content height: in a sections grid cell that makes the card overflow
+     a short cell and leave a gap in a tall one. With no constraint from the
+     parent -- masonry, a panel -- 100% resolves to auto and nothing changes. */
+  height: 100%;
 
   /* Surfaces - all derived from HA theme variables so themes keep working. */
   --mbc-card-bg: var(--ha-card-background, var(--card-background-color, #1c1c1e));
@@ -766,8 +833,12 @@ const STYLES = `
   display: flex;
   flex-direction: row;
   gap: var(--mbc-gap);
+  /* Basis is the height the width suggests; the row may grow into a taller
+     cell and shrink into a shorter one, but never below the touch-target
+     floor. Pinning min-height to the cell height instead made the card unable
+     to render at the size its own min_rows advertises. */
   flex: 1 1 var(--mbc-cell-h);
-  min-height: var(--mbc-cell-h);
+  min-height: var(--mbc-row-min, 88px);
   /* Cap the growth so a very tall container does not stretch buttons into slabs. */
   max-height: calc(var(--mbc-cell-h) * 1.45);
 }
@@ -1062,23 +1133,26 @@ class MultiButtonCard extends BaseElement {
     return this._hass;
   }
 
-  /** Rough height in Lovelace's 50px units - used by the masonry view. */
+  /** Height in Lovelace's 50px units - used by the masonry view. */
   getCardSize() {
     if (!this._config) return 1;
-    const rows = Math.max(1, this._gridEl ? this._gridEl.children.length : 2);
-    return Math.min(12, rows * 2 + (this._config.title ? 1 : 0));
+    const width = this._lastWidth || HA_SECTION_WIDTH;
+    return Math.max(1, Math.ceil(computeContentHeight(this._config, width) / 50));
   }
 
-  /** Sections view (HA 2024.11+): give the card a sensible default footprint. */
+  /**
+   * Sections view: how much of the grid the card asks for. HA calls
+   * getGridOptions on recent versions and getLayoutOptions before that, so
+   * both are provided from the same calculation.
+   */
+  getGridOptions() {
+    if (!this._config) return { columns: 12, rows: 3, min_rows: 2 };
+    return computeGridOptions(this._config);
+  }
+
   getLayoutOptions() {
-    const count = this._config ? this._config.buttons.length : 2;
-    const columns = Math.min(4, Math.max(2, Math.ceil(Math.sqrt(count))));
-    const rows = Math.ceil(count / columns);
-    return {
-      grid_columns: columns >= 3 ? 12 : 6,
-      grid_rows: Math.max(2, rows * 2),
-      grid_min_rows: 2,
-    };
+    const { columns, rows, min_rows: minRows } = this.getGridOptions();
+    return { grid_columns: columns, grid_rows: rows, grid_min_rows: minRows };
   }
 
   /* --- Lifecycle -------------------------------------------------------- */
@@ -1223,6 +1297,10 @@ class MultiButtonCard extends BaseElement {
     const rows = partitionRows(weights, columns);
 
     this._gridEl.style.setProperty('--mbc-cell-h', `${cellHeight}px`);
+    this._gridEl.style.setProperty(
+      '--mbc-row-min',
+      `${toNumber(layout.min_button_size, DEFAULT_LAYOUT.min_button_size)}px`,
+    );
     // Icon and label scale with the cell, within sane bounds.
     this._gridEl.style.setProperty('--mbc-icon-size', `${clamp(Math.round(cellHeight * 0.3), 24, 44)}px`);
     this._gridEl.style.setProperty('--mbc-label-size', `${clamp(Math.round(cellHeight * 0.115), 12, 17)}px`);
@@ -1656,4 +1734,4 @@ if (inBrowser) {
   );
 }
 
-export { CARD_VERSION, CARD_TAG, REPO_URL, MultiButtonCard, partitionRows, computeColumns, computeCellHeight, normalizeConfig, animationActive };
+export { CARD_VERSION, CARD_TAG, REPO_URL, MultiButtonCard, computeGridOptions, computeContentHeight, partitionRows, computeColumns, computeCellHeight, normalizeConfig, animationActive };

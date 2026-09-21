@@ -61,7 +61,7 @@ Adding it by hand instead:
    - Type: **JavaScript module**
 3. Reload the browser
 
-Confirm it loaded: the browser console prints `multi-button-card v1.0.0` on
+Confirm it loaded: the browser console prints `multi-button-card v1.0.1` on
 startup.
 
 ---
@@ -132,6 +132,13 @@ Within a row, all buttons reserve room for the state line as soon as one of them
 uses it. Otherwise the icons and names of neighbouring buttons would sit at
 different heights, which is what makes a card look restless. Rows where nobody
 shows a state stay vertically centred.
+
+In the sections view the card asks for a grid cell that fits its buttons, and
+takes whatever height it is actually given: it fills a cell dragged taller, and
+shrinks the buttons down to the touch-target floor in a cell dragged to
+`min_rows` rather than clipping them.
+
+![Behaviour in a sections grid cell](docs/images/constrained.png)
 
 Portrait and landscape are the same mechanism, only with a different measured
 width:

@@ -6,6 +6,24 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-09-21
+
+### Fixed
+
+- The card overflowed its cell in the sections view. The host element had no
+  height of its own, so it always took its content height and ignored the cell
+  entirely -- overflowing a short one and leaving a gap in a tall one. It now
+  takes the height it is given; with no constraint from the parent that still
+  resolves to the content height, so masonry and panel views are unchanged.
+- The grid footprint was guessed as two rows per row of buttons, which gave two
+  buttons 120px for the 200px they want. It is now computed from the same
+  layout the card actually renders, and `getGridOptions` is provided alongside
+  `getLayoutOptions` so recent Home Assistant versions use the new API.
+- A card dragged down to its own `min_rows` clipped its buttons. Rows were
+  pinned to the height derived from the measured width, so the card could not
+  render at the size it advertised as its minimum. Rows now shrink to the
+  touch-target floor (`min_button_size`) instead.
+
 ## [1.0.0] - 2026-09-21
 
 First release.

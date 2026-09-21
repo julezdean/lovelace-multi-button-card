@@ -6,6 +6,8 @@ import {
   computeCellHeight,
   normalizeConfig,
   animationActive,
+  computeGridOptions,
+  computeContentHeight,
 } from '../multi-button-card.js';
 
 const ones = (n) => Array.from({ length: n }, () => 1);
@@ -227,4 +229,56 @@ test('type none and disabled never animate', () => {
 test('a condition without an entity does not animate, except for "always"', () => {
   assert.equal(animationActive(anim({ when: 'on' }), undefined), false);
   assert.equal(animationActive(anim({ when: 'always' }), undefined), true);
+});
+
+/* -- sections grid footprint ---------------------------------------------- */
+
+const HA_ROW = 56;
+const HA_GAP = 8;
+const cellPx = (rows) => rows * HA_ROW + (rows - 1) * HA_GAP;
+
+const withButtons = (n, extra = {}) =>
+  normalizeConfig({ buttons: Array.from({ length: n }, (_, i) => ({ name: `B${i}` })), ...extra });
+
+test('the requested grid cell is never smaller than the card needs', () => {
+  for (let n = 1; n <= 20; n++) {
+    const config = withButtons(n);
+    const options = computeGridOptions(config);
+    const needed = computeContentHeight(config, 480);
+    assert.ok(
+      cellPx(options.rows) >= needed,
+      `${n} buttons: cell ${cellPx(options.rows)}px < needed ${Math.ceil(needed)}px`,
+    );
+  }
+});
+
+test('the cell is not wastefully larger than needed either', () => {
+  for (let n = 1; n <= 20; n++) {
+    const config = withButtons(n);
+    const options = computeGridOptions(config);
+    const slack = cellPx(options.rows) - computeContentHeight(config, 480);
+    // One grid row of slack is the most rounding can produce.
+    assert.ok(slack < HA_ROW + HA_GAP, `${n} buttons: ${Math.round(slack)}px of slack`);
+  }
+});
+
+test('min_rows never exceeds the default rows', () => {
+  for (let n = 1; n <= 20; n++) {
+    const options = computeGridOptions(withButtons(n));
+    assert.ok(options.min_rows <= options.rows, `${n} buttons: min ${options.min_rows} > ${options.rows}`);
+    assert.ok(options.min_rows >= 1);
+  }
+});
+
+test('a title is accounted for in the footprint', () => {
+  const without = computeContentHeight(withButtons(4), 480);
+  const withTitle = computeContentHeight(withButtons(4, { title: 'Erdgeschoss' }), 480);
+  assert.ok(withTitle > without, `title added no height (${without} -> ${withTitle})`);
+});
+
+test('more buttons never ask for a smaller cell than the same layout with fewer rows', () => {
+  // Guards the regression that started this: two buttons were given 120px for
+  // the 200px they want, so the card overflowed its cell.
+  const two = computeGridOptions(withButtons(2));
+  assert.ok(cellPx(two.rows) >= 200, `two buttons got ${cellPx(two.rows)}px`);
 });

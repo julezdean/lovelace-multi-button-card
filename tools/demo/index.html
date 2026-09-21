@@ -36,6 +36,11 @@
     text-transform: uppercase;
   }
   .frame { /* stands in for the Lovelace column a card lives in */ }
+  .measure {
+    font-size: 12px;
+    margin: 8px 0 0 2px;
+    font-variant-numeric: tabular-nums;
+  }
 </style>
 </head>
 <body>
@@ -53,6 +58,24 @@
 <!-- Scene: portrait tablet column -->
 <div class="scene" id="scene-portrait">
   <div class="frame" style="width: 360px"><div id="portrait-host"></div></div>
+</div>
+
+<!-- Scene: the host is height-constrained, as in a HA sections grid cell -->
+<div class="scene" id="scene-constrained">
+  <div class="strip">
+    <div class="col" style="width: 480px">
+      <p class="caption">the cell the card asks for</p>
+      <div id="con-a" style="outline: 1px dashed #4a9eff"></div>
+    </div>
+    <div class="col" style="width: 480px">
+      <p class="caption">a cell dragged taller</p>
+      <div id="con-b" style="height: 312px; outline: 1px dashed #4a9eff"></div>
+    </div>
+    <div class="col" style="width: 480px">
+      <p class="caption">a cell dragged to min_rows</p>
+      <div id="con-c" style="outline: 1px dashed #4a9eff"></div>
+    </div>
+  </div>
 </div>
 
 <!-- Scene: narrow column, many buttons -> compact inner layout -->
@@ -237,6 +260,49 @@ const SCENES = {
         { name: 'Außen', icon: 'mdi:thermometer', entity: 'sensor.aussen_temperatur', show_state: true },
       ],
     }, document.getElementById('portrait-host'));
+  },
+
+  constrained() {
+    // Exactly what getStubConfig() produces - the config the user tested.
+    const stub = () => ({
+      buttons: [
+        { name: 'Button 1', icon: 'mdi:lightbulb', tap_action: { action: 'none' } },
+        { name: 'Button 2', icon: 'mdi:power', tap_action: { action: 'none' } },
+      ],
+    });
+    // Size the cells the way Home Assistant's sections grid would, from the
+    // card's own answer - so this shows the real case, not invented numbers.
+    const rowPx = (rows) => rows * 56 + (rows - 1) * 8;
+    const probe = card(stub(), document.getElementById('con-a'));
+    const opts = probe.getGridOptions();
+    document.getElementById('con-a').style.height = rowPx(opts.rows) + 'px';
+    document.getElementById('con-c').style.height = rowPx(opts.min_rows) + 'px';
+    document.querySelector('#scene-constrained .caption').textContent =
+      `the cell the card asks for (rows ${opts.rows})`;
+    document.querySelectorAll('#scene-constrained .caption')[2].textContent =
+      `a cell dragged to min_rows (${opts.min_rows})`;
+
+    card(stub(), document.getElementById('con-b'));
+    card(stub(), document.getElementById('con-c'));
+
+    // Print the measured geometry under each card, so the screenshot itself
+    // shows whether the host honours the height it was given.
+    requestAnimationFrame(() => {
+      for (const id of ['con-a', 'con-b', 'con-c']) {
+        const host = document.getElementById(id);
+        const el = host.querySelector('multi-button-card');
+        const p = host.getBoundingClientRect();
+        const h = el.getBoundingClientRect();
+        const overflow = Math.round(h.bottom - p.bottom);
+        const out = document.createElement('p');
+        out.className = 'measure';
+        out.textContent =
+          `container ${Math.round(p.height)} · host ${Math.round(h.height)} · ` +
+          (overflow > 0 ? `overflows ${overflow}` : overflow < 0 ? `gap ${-overflow}` : 'exact');
+        out.style.color = overflow === 0 ? '#5ac26b' : '#ff5f56';
+        host.after(out);
+      }
+    });
   },
 
   compact() {
