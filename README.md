@@ -7,6 +7,12 @@ the same quality with three buttons as with twelve: the layout is computed from
 the button count and the measured width, so there are no empty grid cells, no
 orphan rows and no layout jumps.
 
+[![CI](https://github.com/julezdean/lovelace-multi-button-card/actions/workflows/ci.yml/badge.svg)](https://github.com/julezdean/lovelace-multi-button-card/actions/workflows/ci.yml)
+[![hacs](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/integration)
+[![Release](https://img.shields.io/github/v/release/julezdean/lovelace-multi-button-card?sort=semver)](https://github.com/julezdean/lovelace-multi-button-card/releases)
+
+[![Open your Home Assistant instance and open this repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=julezdean&repository=lovelace-multi-button-card&category=plugin)
+
 ![Overview](docs/images/overview.png)
 
 ---
@@ -33,7 +39,14 @@ orphan rows and no layout jumps.
 
 ## Installation
 
-### HACS (custom repository)
+### HACS
+
+[![Open your Home Assistant instance and open this repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=julezdean&repository=lovelace-multi-button-card&category=plugin)
+
+That button opens the repository straight in your HACS. Install it there, then
+reload the browser (Ctrl/Cmd-Shift-R).
+
+Adding it by hand instead:
 
 1. HACS → three-dot menu → **Custom repositories**
 2. Repository: `julezdean/lovelace-multi-button-card`, category **Dashboard**
