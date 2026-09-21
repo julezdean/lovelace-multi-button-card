@@ -16,7 +16,7 @@
  *   9. Registration
  */
 
-const CARD_VERSION = '1.3.0';
+const CARD_VERSION = '1.4.0';
 
 /**
  * The repository is prefixed, the card tag is not: the prefix groups the repo
@@ -231,6 +231,9 @@ function normalizeButton(raw, index, buttonDefaults, animationDefaults) {
     show_state: src.show_state ?? buttonDefaults.show_state,
     state_display: src.state_display ?? null,
     confirmation: src.confirmation ?? false,
+    // `visibility` is the sections spelling, `conditions` the conditional
+    // card's. Both appear in the wild, so both are accepted.
+    visibility: normalizeVisibility(src.visibility ?? src.conditions),
     weight: resolveWeight(src),
     animation: normalizeAnimation(src.animation ?? src.icon_animation, animationDefaults),
     tap_action: normalizeAction(src.tap_action ?? src.action, src.entity, 'default'),
@@ -250,6 +253,13 @@ function normalizeButton(raw, index, buttonDefaults, animationDefaults) {
   }
 
   return button;
+}
+
+/** A single condition is allowed where a list is expected. */
+function normalizeVisibility(raw) {
+  if (raw === undefined || raw === null) return [];
+  const list = Array.isArray(raw) ? raw : [raw];
+  return list.filter((entry) => entry && typeof entry === 'object');
 }
 
 /** `colspan: 2` and `size: large` are two spellings of the same idea. */
@@ -437,6 +447,93 @@ function applyStateTemplate(template, hass, stateObj, name) {
     const value = attributes[key];
     return value === undefined ? '' : String(value);
   });
+}
+
+/* --- visibility conditions ------------------------------------------------ */
+
+/**
+ * Home Assistant's own condition grammar, as used by `visibility:` in sections
+ * and by the conditional card. A list means "all of these", which is HA's
+ * convention.
+ *
+ * An unknown condition type evaluates to true on purpose: a typo should leave
+ * the button where it is, not make it vanish without a trace.
+ */
+function conditionMet(condition, hass, matchMedia) {
+  if (!condition || typeof condition !== 'object') return true;
+
+  switch (condition.condition) {
+    case 'state': {
+      const stateObj = hass.states[condition.entity];
+      const state = stateObj ? String(stateObj.state) : 'unavailable';
+      if (condition.state !== undefined) {
+        return asList(condition.state).some((value) => String(value) === state);
+      }
+      if (condition.state_not !== undefined) {
+        return !asList(condition.state_not).some((value) => String(value) === state);
+      }
+      return !!stateObj;
+    }
+
+    case 'numeric_state': {
+      const stateObj = hass.states[condition.entity];
+      if (!stateObj) return false;
+      const value = Number(
+        condition.attribute ? stateObj.attributes[condition.attribute] : stateObj.state,
+      );
+      if (Number.isNaN(value)) return false;
+      if (condition.above !== undefined && !(value > Number(condition.above))) return false;
+      if (condition.below !== undefined && !(value < Number(condition.below))) return false;
+      return true;
+    }
+
+    case 'screen': {
+      if (!condition.media_query) return true;
+      return matchMedia(condition.media_query);
+    }
+
+    case 'user': {
+      const current = hass.user && hass.user.id;
+      if (!current) return false;
+      return asList(condition.users).some((id) => String(id) === String(current));
+    }
+
+    case 'and':
+      return asList(condition.conditions).every((c) => conditionMet(c, hass, matchMedia));
+
+    case 'or':
+      return asList(condition.conditions).some((c) => conditionMet(c, hass, matchMedia));
+
+    case 'not':
+      return !asList(condition.conditions).some((c) => conditionMet(c, hass, matchMedia));
+
+    default:
+      return true;
+  }
+}
+
+/** All conditions must hold; no conditions means always visible. */
+function isVisible(conditions, hass, matchMedia) {
+  if (!conditions || conditions.length === 0) return true;
+  if (!hass) return true;
+  return conditions.every((condition) => conditionMet(condition, hass, matchMedia));
+}
+
+function asList(value) {
+  if (value === undefined || value === null) return [];
+  return Array.isArray(value) ? value : [value];
+}
+
+/** Every media query a config mentions, so they can be watched. */
+function collectMediaQueries(conditions, into = new Set()) {
+  asList(conditions).forEach((condition) => {
+    if (!condition || typeof condition !== 'object') return;
+    if (condition.condition === 'screen' && condition.media_query) {
+      into.add(condition.media_query);
+    }
+    if (condition.conditions) collectMediaQueries(condition.conditions, into);
+  });
+  return into;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -793,6 +890,16 @@ function haptic(node, type = 'light') {
 const STYLES = `
 :host {
   display: block;
+}
+
+/* Every button hidden by its conditions: the card removes itself from the
+   dashboard rather than leaving an empty surface, the way a conditional card
+   does. Set on the host, so it also collapses the sections grid cell. */
+:host(.mbc-hidden) {
+  display: none;
+}
+
+:host {
   /* The host must take the height it is given, or it silently falls back to
      its content height: in a sections grid cell that makes the card overflow
      a short cell and leave a gap in a tall one. With no constraint from the
@@ -895,6 +1002,8 @@ const STYLES = `
 }
 
 /* --- Button ------------------------------------------------------------- */
+
+.btn[hidden] { display: none; }
 
 .btn {
   position: relative;
@@ -1142,6 +1251,15 @@ class MultiButtonCard extends BaseElement {
     this._lastCellHeight = 0;
     this._resizeObserver = null;
 
+    /** Indices of the buttons currently visible, in order. */
+    this._visible = null;
+    /** media query string -> MediaQueryList, watched while connected. */
+    this._mediaQueries = new Map();
+    this._matchMedia = (query) => {
+      const entry = this._mediaQueries.get(query);
+      return entry ? entry.matches : false;
+    };
+
     this._gestures = new Map();
     this._armedIndex = -1;
     this._armedTimer = null;
@@ -1212,7 +1330,48 @@ class MultiButtonCard extends BaseElement {
 
   /* --- Lifecycle -------------------------------------------------------- */
 
+  /**
+   * A `screen` condition has to react to the viewport changing, or it would
+   * only ever be evaluated once. One listener per distinct query, not one per
+   * button, so a card repeating the same breakpoint costs nothing extra.
+   */
+  _watchMediaQueries() {
+    this._unwatchMediaQueries();
+    if (!this._config || typeof window === 'undefined' || !window.matchMedia) return;
+
+    const queries = new Set();
+    this._config.buttons.forEach((button) => collectMediaQueries(button.visibility, queries));
+
+    queries.forEach((query) => {
+      try {
+        const list = window.matchMedia(query);
+        const onChange = () => this._sync();
+        if (list.addEventListener) list.addEventListener('change', onChange);
+        else list.addListener(onChange); // older webviews
+        this._mediaQueries.set(query, { matches: list.matches, list, onChange });
+        // Keep the cached value fresh without re-querying on every sync.
+        const refresh = () => {
+          const entry = this._mediaQueries.get(query);
+          if (entry) entry.matches = list.matches;
+        };
+        if (list.addEventListener) list.addEventListener('change', refresh);
+        else list.addListener(refresh);
+      } catch (err) {
+        console.warn(`${CARD_TAG}: invalid media_query "${query}"`, err);
+      }
+    });
+  }
+
+  _unwatchMediaQueries() {
+    this._mediaQueries.forEach(({ list, onChange }) => {
+      if (list.removeEventListener) list.removeEventListener('change', onChange);
+      else if (list.removeListener) list.removeListener(onChange);
+    });
+    this._mediaQueries.clear();
+  }
+
   connectedCallback() {
+    this._watchMediaQueries();
     if (!this._resizeObserver && typeof ResizeObserver !== 'undefined') {
       // Width only. Observing height would feed the layout back into itself.
       this._resizeObserver = new ResizeObserver((entries) => {
@@ -1226,6 +1385,7 @@ class MultiButtonCard extends BaseElement {
   }
 
   disconnectedCallback() {
+    this._unwatchMediaQueries();
     if (this._resizeObserver) this._resizeObserver.disconnect();
     this._clearArmed();
     this._gestures.forEach((gesture) => this._cancelGesture(gesture));
@@ -1339,10 +1499,21 @@ class MultiButtonCard extends BaseElement {
     const padding = toNumber(appearance.padding, 14);
     const innerWidth = Math.max(0, (outerWidth || 0) - padding * 2 - 2);
 
-    const weights = this._config.buttons.map((button) => button.weight);
+    const visible = this._visible || this._config.buttons.map((_, index) => index);
+    const weights = visible.map((index) => this._config.buttons[index].weight);
     const totalWeight = weights.reduce((sum, weight) => sum + weight, 0);
     const columns = computeColumns(this._config, totalWeight, innerWidth);
     const cellHeight = computeCellHeight(this._config, columns, innerWidth);
+
+    // Every button hidden: the card hides itself, the way a conditional card
+    // does, rather than leaving an empty surface on the dashboard.
+    this.classList.toggle('mbc-hidden', visible.length === 0);
+    if (visible.length === 0) {
+      this._gridEl.replaceChildren();
+      this._rowEls = [];
+      this._rowGroups = [];
+      return;
+    }
 
     // Nothing changed -> no DOM writes at all.
     if (columns === this._lastColumns && cellHeight === this._lastCellHeight) return;
@@ -1364,14 +1535,14 @@ class MultiButtonCard extends BaseElement {
 
     // Rebuild the row containers and re-home the (already existing) buttons.
     const rowElements = [];
-    this._rowGroups = rows;
+    this._rowGroups = rows.map((row) => row.map((slot) => visible[slot]));
     rows.forEach((row) => {
       const rowEl = document.createElement('div');
       rowEl.className = 'row';
-      row.forEach((buttonIndex) => {
-        const cell = this._cells[buttonIndex];
+      row.forEach((slot) => {
+        const cell = this._cells[visible[slot]];
         if (!cell) return;
-        const weight = Math.min(weights[buttonIndex], columns);
+        const weight = Math.min(weights[slot], columns);
         cell.root.style.gridColumn = `span ${weight}`;
         rowEl.appendChild(cell.root);
       });
@@ -1379,10 +1550,7 @@ class MultiButtonCard extends BaseElement {
       // count in a strict grid - there the last row stays left-aligned in the
       // same raster rather than stretching to fill the width. minmax(0, 1fr)
       // rather than 1fr so a long label cannot push a track past its share.
-      const rowWeight = row.reduce(
-        (sum, buttonIndex) => sum + Math.min(weights[buttonIndex], columns),
-        0,
-      );
+      const rowWeight = row.reduce((sum, slot) => sum + Math.min(weights[slot], columns), 0);
       const tracks = strict ? columns : rowWeight;
       rowEl.style.gridTemplateColumns = `repeat(${tracks}, minmax(0, 1fr))`;
       rowElements.push(rowEl);
@@ -1399,6 +1567,7 @@ class MultiButtonCard extends BaseElement {
       cell.root.classList.toggle('compact', compact);
       cell.root.classList.toggle('icon-only', iconOnly);
     });
+    this._lastVisibleKey = visible.join(',');
   }
 
   /* --- State sync ------------------------------------------------------- */
@@ -1406,7 +1575,24 @@ class MultiButtonCard extends BaseElement {
   _sync(force = false) {
     if (!this._config || !this._hass || this._cells.length === 0) return;
 
+    // Visibility first: it decides which buttons the layout has to place, so a
+    // change here has to re-run the layout before anything is painted.
+    const visible = [];
     this._config.buttons.forEach((button, index) => {
+      if (isVisible(button.visibility, this._hass, this._matchMedia)) visible.push(index);
+    });
+    const visibleKey = visible.join(',');
+    if (visibleKey !== this._lastVisibleKey) {
+      this._visible = visible;
+      this._cells.forEach((cell, index) => {
+        cell.root.hidden = !visible.includes(index);
+      });
+      this._lastColumns = 0; // force the layout to recompute
+      this._applyLayout(this._lastWidth || this.clientWidth);
+    }
+
+    this._config.buttons.forEach((button, index) => {
+      if (!visible.includes(index)) return;
       const cell = this._cells[index];
       if (!cell) return;
 
@@ -2183,6 +2369,19 @@ class MultiButtonCardEditor extends BaseElement {
       this._buttonFormChanged(value),
     );
     root.appendChild(this._form);
+
+    // Conditions are nested structures that ha-form cannot express. Rather
+    // than silently dropping them on save, the editor states that they exist
+    // and leaves them alone.
+    const conditions = normalizeVisibility(button.visibility ?? button.conditions);
+    const note = document.createElement('div');
+    note.className = 'note';
+    note.textContent =
+      conditions.length > 0
+        ? `Visibility: ${conditions.length} condition${conditions.length === 1 ? '' : 's'}, ` +
+          'kept as written. Edit them in YAML.'
+        : 'Visibility conditions can be added in YAML (visibility:).';
+    root.appendChild(note);
   }
 
   _createForm(schema, data, onChange) {
@@ -2302,6 +2501,9 @@ class MultiButtonCardEditor extends BaseElement {
     if (previous.icon && typeof previous.icon === 'object' && !value.icon) {
       next.icon = previous.icon;
     }
+    // Same for anything the form does not model: carry it through untouched.
+    if (previous.visibility !== undefined) next.visibility = previous.visibility;
+    if (previous.conditions !== undefined) next.conditions = previous.conditions;
 
     const buttons = [...this._config.buttons];
     buttons[index] = next;
@@ -2351,6 +2553,13 @@ class MultiButtonCardEditor extends BaseElement {
 
 const EDITOR_STYLES = `
 :host { display: block; }
+
+.note {
+  margin: 14px 4px 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--secondary-text-color);
+}
 
 ha-form { display: block; }
 
@@ -2537,4 +2746,4 @@ if (inBrowser) {
   );
 }
 
-export { CARD_VERSION, CARD_TAG, REPO_URL, MultiButtonCard, MultiButtonCardEditor, pruneDefaults, computeGridOptions, computeContentHeight, partitionRows, computeColumns, computeCellHeight, normalizeConfig, animationActive };
+export { CARD_VERSION, CARD_TAG, REPO_URL, MultiButtonCard, isVisible, conditionMet, collectMediaQueries, MultiButtonCardEditor, pruneDefaults, computeGridOptions, computeContentHeight, partitionRows, computeColumns, computeCellHeight, normalizeConfig, animationActive };

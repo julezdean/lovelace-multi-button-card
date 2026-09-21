@@ -76,6 +76,25 @@
   <div class="frame" style="width: 360px"><div id="portrait-host"></div></div>
 </div>
 
+<!-- Scene: visibility conditions reshaping the layout -->
+<div class="scene" id="scene-visibility">
+  <div class="strip">
+    <div class="col" style="width: 420px">
+      <p class="caption">light.wohnzimmer = on</p>
+      <div id="vis-on"></div>
+    </div>
+    <div class="col" style="width: 420px">
+      <p class="caption">light.wohnzimmer = off</p>
+      <div id="vis-off"></div>
+    </div>
+    <div class="col" style="width: 420px">
+      <p class="caption">nothing visible</p>
+      <div id="vis-none" style="outline: 1px dashed #ff5f56; min-height: 40px"></div>
+    </div>
+  </div>
+  <pre id="vis-out"></pre>
+</div>
+
 <!-- Scene: the user's config - colspan width and icon size -->
 <div class="scene" id="scene-colspan">
   <div class="strip">
@@ -391,6 +410,58 @@ const SCENES = {
     }, document.getElementById('portrait-host'));
   },
 
+  visibility() {
+    const buttons = [
+      { name: 'Immer da', icon: 'mdi:home' },
+      { name: 'Nur wenn an', icon: 'mdi:lightbulb',
+        visibility: [{ condition: 'state', entity: 'light.wohnzimmer', state: 'on' }] },
+      { name: 'Nur wenn aus', icon: 'mdi:lightbulb-off',
+        visibility: [{ condition: 'state', entity: 'light.wohnzimmer', state: 'off' }] },
+      { name: 'Warm', icon: 'mdi:thermometer',
+        visibility: [{ condition: 'numeric_state', entity: 'sensor.wohnzimmer_temperatur', above: 20 }] },
+    ];
+
+    const offHass = { ...hass, states: { ...hass.states,
+      'light.wohnzimmer': { entity_id: 'light.wohnzimmer', state: 'off', attributes: { friendly_name: 'Wohnzimmer' } } } };
+
+    const a = card({ buttons }, document.getElementById('vis-on'));
+    const b = document.createElement('multi-button-card');
+    b.setConfig({ buttons });
+    b.hass = offHass;
+    document.getElementById('vis-off').appendChild(b);
+
+    // Every button conditioned on something false -> the card hides itself.
+    const c = document.createElement('multi-button-card');
+    c.setConfig({ buttons: [
+      { name: 'Weg', visibility: [{ condition: 'state', entity: 'light.wohnzimmer', state: 'nope' }] },
+      { name: 'Auch weg', visibility: [{ condition: 'state', entity: 'light.kueche', state: 'nope' }] },
+    ] });
+    c.hass = hass;
+    document.getElementById('vis-none').appendChild(c);
+
+    requestAnimationFrame(() => {
+      const names = (el) => [...el.shadowRoot.querySelectorAll('.btn')]
+        .filter((b) => !b.hidden)
+        .map((b) => b.querySelector('.name').textContent);
+      const rowsOf = (el) => [...el.shadowRoot.querySelectorAll('.row')]
+        .map((r) => [...r.children].filter((x) => !x.hidden).length);
+
+      const before = { names: names(a), rows: rowsOf(a) };
+      // The live case: the same card, a new hass, nothing else touched.
+      a.hass = offHass;
+      const after = { names: names(a), rows: rowsOf(a) };
+
+      document.getElementById('vis-out').textContent =
+        `light on:  ${JSON.stringify(names(b) && before.names)}  rows ${JSON.stringify(before.rows)}\n` +
+        `light off: ${JSON.stringify(after.names)}  rows ${JSON.stringify(after.rows)}\n` +
+        `  -> the SAME card after a hass update, not a second one\n` +
+        `none:      visible buttons ${names(c).length}, host display = ` +
+        `${getComputedStyle(c).display}, host height = ${Math.round(c.getBoundingClientRect().height)}`;
+      // Put it back so the picture matches its caption.
+      a.hass = hass;
+    });
+  },
+
   colspan() {
     const buttons = () => [
       { name: 'Button 1', icon: 'mdi:lightbulb', tap_action: { action: 'none' } },
@@ -470,6 +541,34 @@ const SCENES = {
     });
     host.appendChild(el);
     window.__editor = el;
+
+    // Regression check: editing a field must not drop conditions the form
+    // cannot model. Without this the first edit would silently delete them.
+    const probe = document.createElement('multi-button-card-editor');
+    probe.setConfig({
+      type: 'custom:multi-button-card',
+      buttons: [{
+        name: 'Bedingt',
+        entity: 'light.kueche',
+        visibility: [{ condition: 'state', entity: 'light.wohnzimmer', state: 'on' }],
+        icon: { on: 'mdi:lightbulb', off: 'mdi:lightbulb-outline' },
+      }],
+    });
+    probe.hass = hass;
+    document.body.appendChild(probe);
+    let kept = null;
+    probe.addEventListener('config-changed', (e) => { kept = e.detail.config.buttons[0]; });
+    requestAnimationFrame(() => {
+      probe.shadowRoot.querySelector('.row-label').click();
+      const nameInput = probe.shadowRoot.querySelector('label[data-path="name"] input');
+      nameInput.value = 'Umbenannt';
+      nameInput.dispatchEvent(new Event('input', { bubbles: true }));
+      const out = document.getElementById('editor-out');
+      out.textContent =
+        'after renaming a button that has conditions:\n' +
+        JSON.stringify(kept, null, 2);
+      probe.remove();
+    });
 
     // A second editor, parked on a button's sub-page, so one image shows both.
     const subHost = document.getElementById('editor-sub');

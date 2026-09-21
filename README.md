@@ -28,6 +28,7 @@ orphan rows and no layout jumps.
   - [`appearance`](#appearance)
   - [`button` (defaults for all buttons)](#button-defaults-for-all-buttons)
   - [Per-button options](#per-button-options)
+  - [Visibility](#visibility)
   - [Actions](#actions)
   - [Icons](#icons)
   - [Animations](#animations)
@@ -62,7 +63,7 @@ Adding it by hand instead:
    - Type: **JavaScript module**
 3. Reload the browser
 
-Confirm it loaded: the browser console prints `multi-button-card v1.3.0` on
+Confirm it loaded: the browser console prints `multi-button-card v1.4.0` on
 startup.
 
 ---
@@ -263,6 +264,7 @@ switch the colour already says everything, so the extra line is left out. Set
 | `colspan` | number | Slots this button occupies (default `1`) |
 | `size` | `large` \| `wide` \| `full` | Aliases for `colspan` |
 | `confirmation` | boolean \| `{ text }` | Two-step confirmation, see below |
+| `visibility` | list | Conditions under which the button is shown, see [Visibility](#visibility) |
 | `state_display` | string | Template for the state line, see below |
 | `tap_action` / `hold_action` / `double_tap_action` | map | See [Actions](#actions) |
 | `animation` | map \| string | See [Animations](#animations) |
@@ -281,6 +283,55 @@ state_display: "{{state}} · {{attributes.current_temperature}} °C"
 
 Available: `{{state}}` (formatted), `{{raw_state}}`, `{{name}}`, and any
 attribute by name or as `{{attributes.x}}`.
+
+### Visibility
+
+A button can be shown only under certain conditions, using Home Assistant's own
+condition grammar — the same one `visibility:` uses in sections and the
+conditional card:
+
+```yaml
+buttons:
+  - name: Waschmaschine
+    icon: mdi:washing-machine
+    entity: binary_sensor.waschmaschine
+    visibility:
+      - condition: state
+        entity: binary_sensor.waschmaschine
+        state: "on"
+```
+
+A list means **all** of its conditions must hold. Supported:
+
+| `condition` | Keys |
+|---|---|
+| `state` | `entity`, `state` or `state_not` (a value or a list of values) |
+| `numeric_state` | `entity`, `above`, `below`, optional `attribute` |
+| `screen` | `media_query` |
+| `user` | `users` (a list of user ids) |
+| `and` / `or` / `not` | `conditions` |
+
+`conditions:` is accepted as a synonym for `visibility:`, since that is the
+spelling the conditional card uses.
+
+Two details worth knowing:
+
+- **Hiding a button re-runs the layout.** The remaining buttons are re-balanced
+  rather than leaving a hole, so a card whose four buttons drop to three ends up
+  as two plus one, not as three buttons and a gap.
+- **If every button is hidden, the card hides itself**, the way a conditional
+  card does, instead of leaving an empty surface on the dashboard.
+- An **unknown condition type counts as met**. A typo leaves the button where it
+  is rather than making it disappear with no clue as to why.
+
+`screen` conditions are watched with a media query listener, so rotating a
+tablet re-evaluates them; nothing needs to be reloaded.
+
+![Visibility conditions](docs/images/visibility.png)
+
+Conditions are YAML-only for now — they are nested structures that `ha-form`
+cannot express. The editor shows how many a button has and leaves them
+untouched when you edit its other fields.
 
 ### Actions
 
@@ -459,7 +510,7 @@ and open `tools/demo/index.html?scene=overview`.
 
 Scenes: `overview`, `counts`, `portrait`, `landscape`, `constrained` (how the
 card behaves in a sections grid cell), `colspan` (both layout modes with the
-measured widths printed, so the span arithmetic is checkable), `compact`, `animations`,
+measured widths printed, so the span arithmetic is checkable), `visibility`, `compact`, `animations`,
 `editor`.
 
 The `editor` scene is for development only and is deliberately not

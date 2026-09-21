@@ -6,6 +6,31 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-09-21
+
+### Added
+
+- Per-button visibility conditions, using Home Assistant's own condition
+  grammar rather than a format invented here: `state`, `numeric_state`,
+  `screen`, `user` and the `and`/`or`/`not` combinators, written under
+  `visibility:` (or `conditions:`, the conditional card's spelling). A list
+  means all of them must hold.
+- Hiding a button re-runs the layout, so the remaining buttons are re-balanced
+  instead of leaving a hole where one used to be.
+- A card whose buttons are all hidden removes itself from the dashboard, the
+  way a conditional card does, rather than leaving an empty surface.
+- `screen` conditions are watched with a media query listener, one per distinct
+  query, so rotating a tablet re-evaluates them without a reload.
+
+### Notes
+
+- An unknown condition type counts as met. A typo should leave the button where
+  it is, not make it vanish with no clue as to why.
+- Conditions are YAML-only: they are nested structures `ha-form` cannot express.
+  The editor reports how many a button has and carries them through untouched
+  when its other fields are edited - as it already does for state-dependent
+  icons.
+
 ## [1.3.0] - 2026-09-21
 
 ### Changed
