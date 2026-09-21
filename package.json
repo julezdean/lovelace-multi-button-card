@@ -1,0 +1,29 @@
+{
+  "name": "lovelace-multi-button-card",
+  "version": "1.0.0",
+  "description": "Multi-button control card for Home Assistant, tuned for wall-mounted dashboards",
+  "type": "module",
+  "main": "multi-button-card.js",
+  "files": [
+    "multi-button-card.js"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/julezdean/lovelace-multi-button-card.git"
+  },
+  "homepage": "https://github.com/julezdean/lovelace-multi-button-card#readme",
+  "bugs": {
+    "url": "https://github.com/julezdean/lovelace-multi-button-card/issues"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "screenshots": "./tools/screenshots.sh",
+    "icons": "node tools/build-demo-icons.js"
+  },
+  "license": "MIT",
+  "private": true,
+  "devDependencies": {
+    "@mdi/js": "^7.4.47",
+    "yaml": "^2.9.1"
+  }
+}

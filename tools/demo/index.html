@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Multi Button Card - demo harness</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root {
+    /* The variables a stock Home Assistant dark theme provides. The card reads
+       only these, so what this harness shows is what HA shows. */
+    --ha-card-background: #1c1c1e;
+    --card-background-color: #1c1c1e;
+    --primary-text-color: #e8e8ea;
+    --secondary-text-color: #8e8e93;
+    --primary-color: #03a9f4;
+    --state-active-color: #ffc107;
+    --error-color: #ff5f56;
+    --ha-card-box-shadow: 0 2px 16px rgba(0, 0, 0, 0.28);
+  }
+  html, body {
+    margin: 0;
+    background: #0f1012;
+    color: #e8e8ea;
+    font-family: -apple-system, "SF Pro Text", Roboto, "Helvetica Neue", sans-serif;
+  }
+  body { padding: 24px; box-sizing: border-box; }
+  .scene { display: none; }
+  .scene.active { display: block; }
+  .strip { display: flex; flex-wrap: nowrap; gap: 20px; align-items: flex-start; }
+  .col { flex: 0 0 auto; }
+  .caption {
+    font-size: 12px;
+    color: #8e8e93;
+    margin: 0 0 8px 2px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+  .frame { /* stands in for the Lovelace column a card lives in */ }
+</style>
+</head>
+<body>
+
+<!-- Scene: how the layout engine reacts to the button count -->
+<div class="scene" id="scene-counts">
+  <div class="strip" id="counts-strip"></div>
+</div>
+
+<!-- Scene: a realistic mixed wall dashboard -->
+<div class="scene" id="scene-overview">
+  <div class="frame" style="width: 480px"><div id="overview-host"></div></div>
+</div>
+
+<!-- Scene: portrait tablet column -->
+<div class="scene" id="scene-portrait">
+  <div class="frame" style="width: 360px"><div id="portrait-host"></div></div>
+</div>
+
+<!-- Scene: narrow column, many buttons -> compact inner layout -->
+<div class="scene" id="scene-compact">
+  <div class="strip">
+    <div class="col" style="width: 250px">
+      <p class="caption">250 px column</p><div id="compact-a"></div>
+    </div>
+    <div class="col" style="width: 170px">
+      <p class="caption">170 px column</p><div id="compact-b"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Scene: every animation type at once -->
+<div class="scene" id="scene-animations">
+  <div class="frame" style="width: 760px"><div id="anim-host"></div></div>
+</div>
+
+<!-- Scene: landscape / wide wall panel -->
+<div class="scene" id="scene-landscape">
+  <div class="frame" style="width: 900px"><div id="landscape-host"></div></div>
+</div>
+
+<script type="module">
+import '../../multi-button-card.js';   // the real card, not a copy
+import { ICONS } from './icons.js';
+
+/* ------------------------------------------------------------------ *
+ * Stubs for the two Home Assistant elements the card renders.
+ * They do exactly what HA's do for our purposes: draw an MDI path.
+ * ------------------------------------------------------------------ */
+
+const DOMAIN_ICONS = {
+  light: 'mdi:lightbulb',
+  switch: 'mdi:toggle-switch-variant',
+  sensor: 'mdi:eye',
+  climate: 'mdi:thermostat',
+  cover: 'mdi:window-shutter',
+  lock: 'mdi:lock',
+  media_player: 'mdi:speaker',
+  fan: 'mdi:fan',
+  scene: 'mdi:palette',
+  script: 'mdi:script-text',
+  binary_sensor: 'mdi:radiobox-blank',
+  vacuum: 'mdi:robot-vacuum',
+};
+
+class HaIcon extends HTMLElement {
+  static get observedAttributes() { return ['icon']; }
+  set icon(value) { this._icon = value; this._render(); }
+  get icon() { return this._icon; }
+  attributeChangedCallback(_n, _o, value) { this.icon = value; }
+  connectedCallback() { this._render(); }
+  _render() {
+    const path = ICONS[this._icon];
+    this.innerHTML = path
+      ? `<svg viewBox="0 0 24 24" style="width:100%;height:100%;display:block">
+           <path d="${path}" fill="currentColor"></path>
+         </svg>`
+      : '';
+  }
+}
+customElements.define('ha-icon', HaIcon);
+
+class HaStateIcon extends HaIcon {
+  set stateObj(value) {
+    this._stateObj = value;
+    const domain = value && value.entity_id ? value.entity_id.split('.')[0] : '';
+    this.icon = (value && value.attributes && value.attributes.icon) || DOMAIN_ICONS[domain] || 'mdi:help-circle-outline';
+  }
+  set hass(value) { this._hass = value; }
+}
+customElements.define('ha-state-icon', HaStateIcon);
+
+/* ------------------------------------------------------------------ *
+ * Mock hass object
+ * ------------------------------------------------------------------ */
+
+const entity = (id, state, attributes = {}) => [id, { entity_id: id, state, attributes }];
+
+const hass = {
+  states: Object.fromEntries([
+    entity('light.wohnzimmer', 'on', { friendly_name: 'Wohnzimmer' }),
+    entity('light.kueche', 'off', { friendly_name: 'Küche' }),
+    entity('light.schlafzimmer', 'off', { friendly_name: 'Schlafzimmer' }),
+    entity('light.bad', 'on', { friendly_name: 'Bad' }),
+    entity('light.flur', 'off', { friendly_name: 'Flur' }),
+    entity('light.buero', 'on', { friendly_name: 'Büro' }),
+    entity('switch.kaffeemaschine', 'off', { friendly_name: 'Kaffeemaschine' }),
+    entity('switch.terrasse', 'on', { friendly_name: 'Terrasse' }),
+    entity('sensor.wohnzimmer_temperatur', '21.4', { friendly_name: 'Wohnzimmer', unit_of_measurement: '°C' }),
+    entity('sensor.aussen_temperatur', '7.8', { friendly_name: 'Außen', unit_of_measurement: '°C' }),
+    entity('sensor.luftfeuchte', '46', { friendly_name: 'Luftfeuchte', unit_of_measurement: '%' }),
+    entity('binary_sensor.waschmaschine', 'on', { friendly_name: 'Waschmaschine' }),
+    entity('cover.rolladen_wohnzimmer', 'open', { friendly_name: 'Rolladen', current_position: 80 }),
+    entity('lock.haustuer', 'locked', { friendly_name: 'Haustür' }),
+    entity('media_player.wohnzimmer', 'playing', { friendly_name: 'Sonos' }),
+    entity('climate.wohnzimmer', 'heat', { friendly_name: 'Heizung', current_temperature: 21.5 }),
+    entity('fan.schlafzimmer', 'off', { friendly_name: 'Ventilator' }),
+    entity('vacuum.staubsauger', 'docked', { friendly_name: 'Staubsauger' }),
+    entity('sensor.kaputt', 'unavailable', { friendly_name: 'Defekter Sensor' }),
+  ]),
+  callService: (...args) => console.log('callService', ...args),
+  formatEntityState: (stateObj) => {
+    const unit = stateObj.attributes.unit_of_measurement;
+    const translations = {
+      on: 'Ein', off: 'Aus', open: 'Offen', closed: 'Geschlossen',
+      locked: 'Verriegelt', unlocked: 'Offen', playing: 'Läuft',
+      heat: 'Heizen', docked: 'Geladen', unavailable: 'Nicht verfügbar',
+    };
+    if (unit) return `${stateObj.state} ${unit}`;
+    return translations[stateObj.state] || stateObj.state;
+  },
+};
+
+/* ------------------------------------------------------------------ *
+ * Scenes
+ * ------------------------------------------------------------------ */
+
+function card(config, host) {
+  const el = document.createElement('multi-button-card');
+  el.setConfig(config);
+  el.hass = hass;
+  host.appendChild(el);
+  return el;
+}
+
+const BUTTON_POOL = [
+  { name: 'Wohnzimmer', icon: 'mdi:sofa', entity: 'light.wohnzimmer' },
+  { name: 'Küche', icon: 'mdi:countertop', entity: 'light.kueche' },
+  { name: 'Bad', icon: 'mdi:shower', entity: 'light.bad' },
+  { name: 'Schlafzimmer', icon: 'mdi:bed', entity: 'light.schlafzimmer' },
+  { name: 'Flur', icon: 'mdi:door-open', entity: 'light.flur' },
+  { name: 'Büro', icon: 'mdi:desk-lamp', entity: 'light.buero' },
+  { name: 'Terrasse', icon: 'mdi:string-lights', entity: 'switch.terrasse' },
+  { name: 'Kaffee', icon: 'mdi:coffee-maker', entity: 'switch.kaffeemaschine' },
+];
+
+const SCENES = {
+  counts() {
+    const strip = document.getElementById('counts-strip');
+    for (const count of [1, 2, 3, 5, 8]) {
+      const col = document.createElement('div');
+      col.className = 'col';
+      col.style.width = '340px';
+      col.innerHTML = `<p class="caption">${count} ${count === 1 ? 'button' : 'buttons'}</p>`;
+      strip.appendChild(col);
+      const host = document.createElement('div');
+      col.appendChild(host);
+      card({ buttons: BUTTON_POOL.slice(0, count).map((b) => ({ ...b })) }, host);
+    }
+  },
+
+  overview() {
+    card({
+      title: 'Erdgeschoss',
+      buttons: [
+        { name: 'Wohnzimmer', icon: 'mdi:sofa', entity: 'light.wohnzimmer',
+          hold_action: { action: 'more-info' },
+          animation: { type: 'breathe', when: 'on', duration: '4s', intensity: 0.7 } },
+        { name: 'Küche', icon: 'mdi:countertop', entity: 'light.kueche' },
+        { name: 'Waschmaschine', icon: 'mdi:washing-machine', entity: 'binary_sensor.waschmaschine',
+          show_state: true, state_display: 'Läuft', animation: { type: 'pulse', when: 'on', duration: '2.4s' } },
+        { name: 'Temperatur', icon: 'mdi:thermometer', entity: 'sensor.wohnzimmer_temperatur', show_state: true },
+        { name: 'Gute Nacht', icon: 'mdi:weather-night', colspan: 2,
+          tap_action: { action: 'call-service', service: 'scene.turn_on', target: { entity_id: 'scene.gute_nacht' } } },
+      ],
+    }, document.getElementById('overview-host'));
+  },
+
+  portrait() {
+    card({
+      buttons: [
+        { name: 'Alles aus', icon: 'mdi:power', colspan: 2, confirmation: true,
+          tap_action: { action: 'call-service', service: 'light.turn_off', target: { entity_id: 'all' } } },
+        { name: 'Wohnzimmer', icon: 'mdi:sofa', entity: 'light.wohnzimmer' },
+        { name: 'Küche', icon: 'mdi:countertop', entity: 'light.kueche' },
+        { name: 'Bad', icon: 'mdi:shower', entity: 'light.bad' },
+        { name: 'Flur', icon: 'mdi:door-open', entity: 'light.flur' },
+        { name: 'Haustür', icon: 'mdi:lock', entity: 'lock.haustuer', show_state: true },
+        { name: 'Außen', icon: 'mdi:thermometer', entity: 'sensor.aussen_temperatur', show_state: true },
+      ],
+    }, document.getElementById('portrait-host'));
+  },
+
+  compact() {
+    const many = [
+      ...BUTTON_POOL,
+      { name: 'Außen', icon: 'mdi:thermometer', entity: 'sensor.aussen_temperatur' },
+      { name: 'Luft', icon: 'mdi:water-percent', entity: 'sensor.luftfeuchte' },
+    ];
+    card({ layout: { column_width: 120 }, buttons: many }, document.getElementById('compact-a'));
+    card({ layout: { column_width: 120 }, buttons: many }, document.getElementById('compact-b'));
+  },
+
+  animations() {
+    const types = ['pulse', 'breathe', 'bounce', 'spin', 'shake', 'glow', 'blink', 'wobble'];
+    card({
+      buttons: types.map((type) => ({
+        name: type,
+        icon: 'mdi:lightbulb',
+        entity: 'light.wohnzimmer',
+        animation: { type, when: 'always', duration: '2s' },
+      })),
+    }, document.getElementById('anim-host'));
+  },
+
+  landscape() {
+    card({
+      buttons: [
+        { name: 'Wohnzimmer', icon: 'mdi:sofa', entity: 'light.wohnzimmer' },
+        { name: 'Küche', icon: 'mdi:countertop', entity: 'light.kueche' },
+        { name: 'Bad', icon: 'mdi:shower', entity: 'light.bad' },
+        { name: 'Schlafzimmer', icon: 'mdi:bed', entity: 'light.schlafzimmer' },
+        { name: 'Sonos', icon: 'mdi:speaker', entity: 'media_player.wohnzimmer', show_state: true,
+          animation: { type: 'pulse', when: 'playing', duration: '2s', intensity: 0.6 } },
+        { name: 'Heizung', icon: 'mdi:radiator', entity: 'climate.wohnzimmer', show_state: true },
+        { name: 'Rolladen', icon: 'mdi:window-shutter', entity: 'cover.rolladen_wohnzimmer', show_state: true },
+        { name: 'Staubsauger', icon: 'mdi:robot-vacuum', entity: 'vacuum.staubsauger', show_state: true },
+        { name: 'Defekt', icon: 'mdi:alert', entity: 'sensor.kaputt', show_state: true },
+        { name: 'Fehlt', icon: 'mdi:help', entity: 'light.gibt_es_nicht' },
+      ],
+    }, document.getElementById('landscape-host'));
+  },
+};
+
+const name = new URLSearchParams(location.search).get('scene') || 'overview';
+document.getElementById(`scene-${name}`).classList.add('active');
+SCENES[name]();
+document.body.dataset.ready = 'true';
+</script>
+</body>
+</html>
