@@ -329,9 +329,11 @@ tablet re-evaluates them; nothing needs to be reloaded.
 
 ![Visibility conditions](docs/images/visibility.png)
 
-Conditions are YAML-only for now — they are nested structures that `ha-form`
-cannot express. The editor shows how many a button has and leaves them
-untouched when you edit its other fields.
+In the visual editor, conditions are edited on a button's page under
+**Visibility**, using Home Assistant's own conditions editor — the same control
+the conditional card and section visibility use. It is loaded on demand; if it
+cannot be loaded, the section falls back to a note and the conditions stay
+editable in YAML, untouched by anything else you change.
 
 ### Actions
 

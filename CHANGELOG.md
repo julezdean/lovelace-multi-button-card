@@ -22,14 +22,21 @@ All notable changes to this project are documented here. The format follows
 - `screen` conditions are watched with a media query listener, one per distinct
   query, so rotating a tablet re-evaluates them without a reload.
 
+- Conditions are editable in the visual editor, on a button's page under
+  Visibility. `ha-form` cannot express nested structures, so this mounts Home
+  Assistant's own `ha-card-conditions-editor` - the control the conditional
+  card and section visibility use. It is defined lazily by HA, so it is pulled
+  in on demand via `loadCardHelpers`; if that fails the section falls back to a
+  note and YAML still works.
+
 ### Notes
 
 - An unknown condition type counts as met. A typo should leave the button where
   it is, not make it vanish with no clue as to why.
-- Conditions are YAML-only: they are nested structures `ha-form` cannot express.
-  The editor reports how many a button has and carries them through untouched
-  when its other fields are edited - as it already does for state-dependent
-  icons.
+- Removing the last condition drops the `visibility` key entirely rather than
+  leaving an empty list behind.
+- The editor carries through anything it cannot model - conditions, and
+  state-dependent icon maps - instead of dropping them on save.
 
 ## [1.3.0] - 2026-09-21
 

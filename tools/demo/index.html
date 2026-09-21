@@ -51,6 +51,9 @@
   .form label { display: flex; justify-content: space-between; gap: 8px; padding: 2px 0; }
   .form fieldset { border: 1px solid #2c2d31; border-radius: 6px; margin: 6px 0; padding: 6px 8px; }
   .form fieldset::before { content: attr(data-section); font-size: 11px; color: #8e8e93; }
+  .cond-list { font-size: 12px; }
+  .cond { display: flex; justify-content: space-between; gap: 8px; padding: 4px 6px; border: 1px solid #2c2d31; border-radius: 6px; margin-bottom: 4px; }
+  .cond-add { background: none; border: 1px dashed #2c2d31; color: #4a9eff; border-radius: 6px; padding: 6px; width: 100%; font-size: 12px; }
   .form input { width: 130px; background: #1c1d20; border: 1px solid #2c2d31; color: #e8e8ea; border-radius: 4px; padding: 2px 4px; }
   .measure {
     font-size: 12px;
@@ -294,6 +297,60 @@ class HaFormStub extends HTMLElement {
   }
 }
 customElements.define('ha-form', HaFormStub);
+
+/**
+ * Stand-in for HA's ha-card-conditions-editor. It does not reproduce HA's UI -
+ * that cannot be checked outside HA - only the contract the card relies on:
+ * read .conditions, and emit value-changed with the new list in detail.value.
+ *
+ * ?noconditions=1 leaves it undefined, which exercises the fallback path.
+ */
+if (!new URLSearchParams(location.search).has('noconditions')) {
+  class HaCardConditionsEditorStub extends HTMLElement {
+    set hass(v) { this._hass = v; }
+    set conditions(v) { this._conditions = v || []; this._render(); }
+    get conditions() { return this._conditions; }
+    _render() {
+      this.innerHTML = '';
+      const list = document.createElement('div');
+      list.className = 'cond-list';
+      (this._conditions || []).forEach((c, i) => {
+        const row = document.createElement('div');
+        row.className = 'cond';
+        row.textContent = `${c.condition}: ${c.entity || ''} ${c.state || c.above || ''}`;
+        const del = document.createElement('button');
+        del.textContent = 'x';
+        del.addEventListener('click', () => {
+          const next = this._conditions.filter((_, j) => j !== i);
+          this.dispatchEvent(new CustomEvent('value-changed', {
+            detail: { value: next }, bubbles: true, composed: true,
+          }));
+        });
+        row.appendChild(del);
+        list.appendChild(row);
+      });
+      const add = document.createElement('button');
+      add.className = 'cond-add';
+      add.textContent = '+ add condition';
+      add.addEventListener('click', () => {
+        const next = [...(this._conditions || []),
+          { condition: 'state', entity: 'light.wohnzimmer', state: 'on' }];
+        this.dispatchEvent(new CustomEvent('value-changed', {
+          detail: { value: next }, bubbles: true, composed: true,
+        }));
+      });
+      list.appendChild(add);
+      this.appendChild(list);
+    }
+  }
+  customElements.define('ha-card-conditions-editor', HaCardConditionsEditorStub);
+}
+
+// loadCardHelpers exists in HA; here it only has to resolve so the loader path
+// is exercised rather than short-circuited.
+window.loadCardHelpers = async () => ({
+  createCardElement: async () => ({ constructor: { getConfigElement: async () => ({}) } }),
+});
 
 /** ha-icon-button is only a clickable wrapper as far as the editor cares. */
 class HaIconButtonStub extends HTMLElement {}
@@ -564,10 +621,34 @@ const SCENES = {
       nameInput.value = 'Umbenannt';
       nameInput.dispatchEvent(new Event('input', { bubbles: true }));
       const out = document.getElementById('editor-out');
-      out.textContent =
-        'after renaming a button that has conditions:\n' +
-        JSON.stringify(kept, null, 2);
-      probe.remove();
+      const lines = ['rename keeps what the form cannot model:',
+        JSON.stringify(kept, null, 2)];
+
+      // Now drive the conditions editor itself.
+      setTimeout(() => {
+        const sr = probe.shadowRoot;
+        const ed = sr.querySelector('ha-card-conditions-editor');
+        if (!ed) {
+          lines.push('', 'conditions editor: not available -> fallback note shown');
+          lines.push(sr.querySelector('.note')?.textContent || '(no note!)');
+        } else {
+          const startCount = ed.conditions.length;
+          ed.querySelector('.cond-add').click();
+          const added = kept && kept.visibility ? kept.visibility.length : 0;
+          // Remove every condition -> visibility must disappear entirely.
+          let guard = 0;
+          while (sr.querySelector('.cond button') && guard++ < 10) {
+            sr.querySelector('.cond button').click();
+          }
+          lines.push('',
+            `conditions editor: mounted, started with ${startCount}`,
+            `after + add condition: ${added}`,
+            `after removing all: visibility key = ${JSON.stringify(kept.visibility)}`,
+            `full button: ${JSON.stringify(kept)}`);
+        }
+        out.textContent = lines.join('\n');
+        probe.remove();
+      }, 50);
     });
 
     // A second editor, parked on a button's sub-page, so one image shows both.

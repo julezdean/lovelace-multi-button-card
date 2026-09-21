@@ -1997,6 +1997,53 @@ const LABELS = {
 
 const ACTION_TYPES = ['more-info', 'toggle', 'perform-action', 'navigate', 'url', 'assist', 'none'];
 
+const CONDITIONS_TAG = 'ha-card-conditions-editor';
+
+/**
+ * Home Assistant defines its conditions editor lazily: it only reaches the
+ * element registry once something that uses it has been loaded. Creating a
+ * conditional card and asking for its config element is the documented way to
+ * pull that in - `loadCardHelpers` is the supported entry point for it.
+ *
+ * Everything here is best-effort. If any step fails the editor falls back to
+ * telling the user to write the conditions in YAML, which still works.
+ */
+let conditionsEditorReady = null;
+
+function ensureConditionsEditor() {
+  if (customElements.get(CONDITIONS_TAG)) return Promise.resolve(true);
+
+  if (!conditionsEditorReady) {
+    conditionsEditorReady = (async () => {
+      try {
+        if (typeof window === 'undefined' || !window.loadCardHelpers) return false;
+        const helpers = await window.loadCardHelpers();
+        if (!helpers || !helpers.createCardElement) return false;
+
+        const probe = await helpers.createCardElement({
+          type: 'conditional',
+          conditions: [],
+          card: { type: 'button' },
+        });
+        const ctor = probe && probe.constructor;
+        if (ctor && typeof ctor.getConfigElement === 'function') {
+          await ctor.getConfigElement();
+        }
+        await customElements.whenDefined(CONDITIONS_TAG);
+        return true;
+      } catch (err) {
+        console.warn(
+          `${CARD_TAG}: could not load ${CONDITIONS_TAG}; ` +
+            'visibility conditions stay editable in YAML.',
+          err,
+        );
+        return false;
+      }
+    })();
+  }
+  return conditionsEditorReady;
+}
+
 const select = (name, options, mode = 'dropdown') => ({
   name,
   selector: { select: { mode, options } },
@@ -2370,18 +2417,74 @@ class MultiButtonCardEditor extends BaseElement {
     );
     root.appendChild(this._form);
 
-    // Conditions are nested structures that ha-form cannot express. Rather
-    // than silently dropping them on save, the editor states that they exist
-    // and leaves them alone.
+    // Visibility uses Home Assistant's own conditions editor, which has to be
+    // loaded first. Until it is there - or if it never arrives - the slot
+    // carries a note saying the conditions are editable in YAML.
+    const slot = document.createElement('div');
+    slot.className = 'conditions';
+    const heading = document.createElement('div');
+    heading.className = 'heading';
+    heading.textContent = 'Visibility';
+    slot.append(heading, this._conditionsNote(button));
+    root.appendChild(slot);
+
+    this._mountConditionsEditor(slot, index);
+  }
+
+  /** The fallback, and what is shown while the real editor loads. */
+  _conditionsNote(button) {
     const conditions = normalizeVisibility(button.visibility ?? button.conditions);
     const note = document.createElement('div');
     note.className = 'note';
     note.textContent =
       conditions.length > 0
-        ? `Visibility: ${conditions.length} condition${conditions.length === 1 ? '' : 's'}, ` +
-          'kept as written. Edit them in YAML.'
-        : 'Visibility conditions can be added in YAML (visibility:).';
-    root.appendChild(note);
+        ? `${conditions.length} condition${conditions.length === 1 ? '' : 's'} set, kept as ` +
+          'written. They can be edited in YAML.'
+        : 'Always visible. Conditions can be added in YAML (visibility:).';
+    return note;
+  }
+
+  async _mountConditionsEditor(slot, index) {
+    const available = await ensureConditionsEditor();
+    // The page may have changed while we waited.
+    if (!available || !slot.isConnected || this._openButton !== index) return;
+
+    const button = this._config.buttons[index];
+    if (!button) return;
+
+    const editor = document.createElement(CONDITIONS_TAG);
+    editor.hass = this._hass;
+    editor.conditions = normalizeVisibility(button.visibility ?? button.conditions);
+    editor.addEventListener('value-changed', (event) => {
+      event.stopPropagation();
+      // Accept either shape rather than betting on one.
+      const detail = event.detail || {};
+      const next = Array.isArray(detail.value)
+        ? detail.value
+        : Array.isArray(detail.conditions)
+          ? detail.conditions
+          : null;
+      if (next) this._conditionsChanged(index, next);
+    });
+
+    slot.replaceChildren(
+      Object.assign(document.createElement('div'), {
+        className: 'heading',
+        textContent: 'Visibility',
+      }),
+      editor,
+    );
+  }
+
+  _conditionsChanged(index, conditions) {
+    const buttons = [...this._config.buttons];
+    const next = { ...buttons[index] };
+    // An empty list is the absence of conditions, not a condition of its own.
+    if (conditions.length > 0) next.visibility = conditions;
+    else delete next.visibility;
+    delete next.conditions; // never keep both spellings
+    buttons[index] = next;
+    this._commit({ ...this._config, buttons });
   }
 
   _createForm(schema, data, onChange) {
@@ -2554,8 +2657,11 @@ class MultiButtonCardEditor extends BaseElement {
 const EDITOR_STYLES = `
 :host { display: block; }
 
+.conditions { margin-top: 18px; }
+.conditions .heading { margin-bottom: 6px; }
+
 .note {
-  margin: 14px 4px 0;
+  margin: 4px 4px 0;
   font-size: 12px;
   line-height: 1.45;
   color: var(--secondary-text-color);
