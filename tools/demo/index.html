@@ -76,6 +76,12 @@
   <div class="frame" style="width: 360px"><div id="portrait-host"></div></div>
 </div>
 
+<!-- Scene: the user's config - colspan width and icon size -->
+<div class="scene" id="scene-colspan">
+  <div class="frame" style="width: 560px"><div id="colspan-host"></div></div>
+  <pre id="colspan-out"></pre>
+</div>
+
 <!-- Scene: the visual editor, against the ha-form stub -->
 <div class="scene" id="scene-editor">
   <div class="strip">
@@ -374,6 +380,59 @@ const SCENES = {
         { name: 'Außen', icon: 'mdi:thermometer', entity: 'sensor.aussen_temperatur', show_state: true },
       ],
     }, document.getElementById('portrait-host'));
+  },
+
+  colspan() {
+    card({
+      layout: { mode: 'grid', columns: 5, max_columns: 5 },
+      buttons: [
+        { name: 'Button 1', icon: 'mdi:lightbulb', tap_action: { action: 'none' } },
+        { name: 'Button 2', icon: 'mdi:power', colspan: 2, tap_action: { action: 'none' },
+          animation: { duration: '1s', when: 'always' } },
+        { name: 'Button 3', icon: 'mdi:bed' },
+        { name: 'Button 4', icon: 'mdi:bed', icon_size: 48 },
+        { name: 'Button 5', icon: 'mdi:bed', icon_size: '16px' },
+      ],
+    }, document.getElementById('colspan-host'));
+
+    requestAnimationFrame(() => {
+      const el = document.querySelector('#colspan-host multi-button-card');
+      const btns = [...el.shadowRoot.querySelectorAll('.btn')];
+      const wx = btns.map((b) => b.getBoundingClientRect().width);
+      const w = wx.map((n) => Math.round(n));
+      const gap = parseFloat(getComputedStyle(el.shadowRoot.querySelector('.grid')).gap) || 12;
+      const single = w[2]; // a 1-slot button in the second row
+      const expected = Math.round(single * 2 + gap);
+      const rows2 = [...el.shadowRoot.querySelectorAll('.row')].map((r, ri) => {
+        const kids = [...r.children].map((c) => {
+          const cs = getComputedStyle(c);
+          const name = c.querySelector('.name')?.textContent || '?';
+          return `${name}[g${cs.flexGrow} b${cs.flexBasis} pad${cs.paddingLeft} bw${cs.borderLeftWidth}] = ${c.getBoundingClientRect().width.toFixed(2)}`;
+        });
+        return `row${ri} w=${r.getBoundingClientRect().width.toFixed(2)} gap=${getComputedStyle(r).gap}\n    ` + kids.join('\n    ');
+      });
+      const icons = btns.map((b) => {
+        const i = b.querySelector('.icon');
+        const r = i.getBoundingClientRect();
+        return `${Math.round(r.width)}x${Math.round(r.height)}`;
+      });
+      document.getElementById('colspan-out').textContent =
+        rows2.join('\n') + '\n\nicon boxes (3=default, 4=48, 5=16px): ' + icons.join('  ') + '\n\n';
+      const flex = btns.map((b) => {
+        const cs = getComputedStyle(b);
+        return `${cs.flexGrow}/${cs.flexShrink}/${cs.flexBasis}`;
+      });
+      const rowEls = [...el.shadowRoot.querySelectorAll('.row')];
+      const rowW = rowEls.map((r) => Math.round(r.getBoundingClientRect().width));
+      document.getElementById('colspan-out').textContent +=
+        `flex:   ${flex.join('  ')}\n` +
+        `rows:   ${rowW.join(', ')}\n` +
+        `widths: ${w.join(', ')}\n` +
+        `one slot (row 2): ${wx[2].toFixed(2)}\n` +
+        `colspan 2 is:     ${wx[1].toFixed(2)}\n` +
+        `should be:        ${(wx[2] * 2 + gap).toFixed(2)}  (2 x slot + ${gap} gap)\n` +
+        `off by:           ${(wx[1] - (wx[2] * 2 + gap)).toFixed(2)}`;
+    });
   },
 
   editor() {

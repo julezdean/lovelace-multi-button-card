@@ -62,7 +62,7 @@ Adding it by hand instead:
    - Type: **JavaScript module**
 3. Reload the browser
 
-Confirm it loaded: the browser console prints `multi-button-card v1.1.0` on
+Confirm it loaded: the browser console prints `multi-button-card v1.2.0` on
 startup.
 
 ---
@@ -122,7 +122,9 @@ max_button_size)` — which is why a single button does not become a huge tile a
 twelve buttons stay tappable.
 
 `colspan` participates in the same calculation: a button with `colspan: 2`
-occupies two slots and grows to twice the width of its neighbours.
+occupies two slots. A row is a grid of equal tracks and a wide button spans
+several of them, so `colspan: 2` is exactly as wide as two single buttons plus
+the gap between them - not merely "about twice as wide".
 
 Below 96 px of button height the button switches to a horizontal inner layout —
 icon left, text right — instead of squeezing the label. This keeps a card with
@@ -420,7 +422,9 @@ so the images in this README always show the current code. Serve the repo root
 and open `tools/demo/index.html?scene=overview`.
 
 Scenes: `overview`, `counts`, `portrait`, `landscape`, `constrained` (how the
-card behaves in a sections grid cell), `compact`, `animations`, `editor`.
+card behaves in a sections grid cell), `colspan` (prints the measured button
+widths, so the span arithmetic is checkable), `compact`, `animations`,
+`editor`.
 
 The `editor` scene is for development only and is deliberately not
 screenshotted: it renders against a stub, not against Home Assistant's real

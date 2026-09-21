@@ -16,7 +16,7 @@
  *   9. Registration
  */
 
-const CARD_VERSION = '1.1.0';
+const CARD_VERSION = '1.2.0';
 
 /**
  * The repository is prefixed, the card tag is not: the prefix groups the repo
@@ -830,8 +830,15 @@ const STYLES = `
 }
 
 .row {
-  display: flex;
-  flex-direction: row;
+  /* Grid, not flex: a weight-2 button has to be exactly as wide as two
+     weight-1 buttons plus the gap between them, and flex cannot express that.
+     Sharing out free space by flex-grow ignores that a row of two elements has
+     one gap where a row of three has two, and the obvious correction --
+     putting the swallowed gap into flex-basis -- does nothing, because with
+     box-sizing: border-box a basis below padding + border is silently raised
+     to it. A 'span 2' over equal 1fr tracks is the property we want. */
+  display: grid;
+  grid-auto-flow: column;
   gap: var(--mbc-gap);
   /* Basis is the height the width suggests; the row may grow into a taller
      cell and shrink into a shorter one, but never below the touch-target
@@ -847,7 +854,6 @@ const STYLES = `
 
 .btn {
   position: relative;
-  flex: 1 1 0;
   min-width: 0;
   display: flex;
   flex-direction: column;
@@ -1301,6 +1307,7 @@ class MultiButtonCard extends BaseElement {
 
     const rows = partitionRows(weights, columns);
 
+    this._gridEl.style.setProperty('--mbc-gap', cssLength(layout.gap, '12px'));
     this._gridEl.style.setProperty('--mbc-cell-h', `${cellHeight}px`);
     this._gridEl.style.setProperty(
       '--mbc-row-min',
@@ -1320,9 +1327,16 @@ class MultiButtonCard extends BaseElement {
         const cell = this._cells[buttonIndex];
         if (!cell) return;
         const weight = Math.min(weights[buttonIndex], columns);
-        cell.root.style.flexGrow = String(weight);
+        cell.root.style.gridColumn = `span ${weight}`;
         rowEl.appendChild(cell.root);
       });
+      // Equal tracks, one per slot the row holds. minmax(0, 1fr) rather than
+      // 1fr so a long label cannot push a track wider than its share.
+      const rowWeight = row.reduce(
+        (sum, buttonIndex) => sum + Math.min(weights[buttonIndex], columns),
+        0,
+      );
+      rowEl.style.gridTemplateColumns = `repeat(${rowWeight}, minmax(0, 1fr))`;
       rowElements.push(rowEl);
     });
     this._gridEl.replaceChildren(...rowElements);
@@ -1725,8 +1739,8 @@ const LABELS = {
   button: 'Button defaults',
   active_color: 'Accent colour',
   icon_color: 'Icon colour',
-  icon_size: 'Icon size',
-  label_size: 'Label size',
+  icon_size: 'Icon size (px)',
+  label_size: 'Label size (px)',
   show_name: 'Show name',
   show_state: 'Show state',
   press_effect: 'Press effect',
@@ -1818,6 +1832,8 @@ const CARD_SCHEMA = [
     icon: 'mdi:gesture-tap-button',
     schema: [
       { name: 'radius', selector: { number: { min: 0, max: 60, mode: 'box' } } },
+      { name: 'icon_size', selector: { number: { min: 12, max: 96, mode: 'slider' } } },
+      { name: 'label_size', selector: { number: { min: 8, max: 32, mode: 'slider' } } },
       { name: 'active_color', selector: { text: {} } },
       { name: 'icon_color', selector: { text: {} } },
       { name: 'show_name', selector: { boolean: {} } },
@@ -1876,6 +1892,8 @@ const BUTTON_SCHEMA = [
       },
       { name: 'label', selector: { text: {} } },
       { name: 'state_display', selector: { text: {} } },
+      { name: 'icon_size', selector: { number: { min: 12, max: 96, mode: 'slider' } } },
+      { name: 'icon_color', selector: { text: {} } },
       { name: 'confirmation', selector: { boolean: {} } },
     ],
   },
@@ -2168,6 +2186,8 @@ class MultiButtonCardEditor extends BaseElement {
       colspan: button.colspan ?? 1,
       label: button.label ?? '',
       state_display: button.state_display ?? '',
+      icon_size: toNumber(button.icon_size ?? (this._config.button || {}).icon_size, undefined),
+      icon_color: button.icon_color ?? '',
       show_name: button.show_name ?? true,
       show_state: showStateToForm(button.show_state),
       confirmation: button.confirmation === true || (button.confirmation && typeof button.confirmation === 'object'),
@@ -2190,6 +2210,8 @@ class MultiButtonCardEditor extends BaseElement {
         colspan: value.colspan,
         label: value.label,
         state_display: value.state_display,
+        icon_size: value.icon_size,
+        icon_color: value.icon_color,
         show_name: value.show_name,
         show_state: showStateFromForm(value.show_state),
         confirmation: value.confirmation,
@@ -2203,6 +2225,8 @@ class MultiButtonCardEditor extends BaseElement {
         show_name: true,
         show_state: 'auto',
         confirmation: false,
+        icon_size: toNumber((this._config.button || {}).icon_size, undefined),
+        icon_color: (this._config.button || {}).icon_color,
         // Inherited from the card, so only a genuine deviation is written out.
         animation: { ...DEFAULT_ANIMATION, ...(this._config.animation || {}) },
       },

@@ -6,6 +6,26 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-09-21
+
+### Added
+
+- Icon size is editable in the visual editor, both as a card-wide default and
+  per button. The option already existed in YAML; it was simply not offered by
+  the form, which is where people looked for it.
+- Per-button icon colour in the editor, next to the size.
+
+### Fixed
+
+- A button with `colspan: 2` was not as wide as two single buttons plus the gap
+  between them - it came out one gap too narrow, and its neighbour one gap too
+  wide. Rows shared their width with flexbox, which distributes only the FREE
+  space by weight, and a row holding two elements has one gap where a row of
+  three has two. Correcting that through `flex-basis` does nothing, because
+  with `box-sizing: border-box` a basis below the button's padding and border
+  is silently raised to it. Rows are now a CSS grid of equal tracks and a wide
+  button spans two of them, which is the property that was meant all along.
+
 ## [1.1.0] - 2026-09-21
 
 ### Added
