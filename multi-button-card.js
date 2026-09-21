@@ -16,7 +16,7 @@
  *   9. Registration
  */
 
-const CARD_VERSION = '1.0.1';
+const CARD_VERSION = '1.1.0';
 
 /**
  * The repository is prefixed, the card tag is not: the prefix groups the repo
@@ -1099,6 +1099,11 @@ class MultiButtonCard extends BaseElement {
 
   /* --- Lovelace contract ------------------------------------------------ */
 
+  /** Lovelace asks for this; without it the UI says "no visual editor". */
+  static getConfigElement() {
+    return document.createElement(EDITOR_TAG);
+  }
+
   static getStubConfig() {
     return {
       type: `custom:${CARD_TAG}`,
@@ -1681,7 +1686,709 @@ function escapeHtml(text) {
 }
 
 /* -------------------------------------------------------------------------- */
-/* 9. Registration                                                            */
+/* 9. Visual editor                                                           */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The editor is built from ha-form, which Home Assistant renders from a
+ * declarative schema. ha-form has no concept of a list, and this card's whole
+ * point is a list of buttons - so the buttons get their own list UI, and each
+ * button opens a sub-page with its own ha-form.
+ *
+ * Two rules keep this from fighting itself:
+ *
+ *   1. ha-form is created once per page and then only fed new `.data`.
+ *      Rebuilding it on every keystroke would take the focus out of the field
+ *      being typed into.
+ *   2. What goes back into the config is pruned of anything equal to a default,
+ *      so using the editor does not bloat the YAML with every option.
+ */
+
+const EDITOR_TAG = `${CARD_TAG}-editor`;
+
+/** Labels, so the form does not show raw config keys. */
+const LABELS = {
+  title: 'Title',
+  layout: 'Layout',
+  mode: 'Mode',
+  columns: 'Columns',
+  gap: 'Gap between buttons',
+  column_width: 'Target column width',
+  max_columns: 'Maximum columns',
+  min_button_size: 'Minimum button height',
+  max_button_size: 'Maximum button height',
+  appearance: 'Card appearance',
+  background: 'Background',
+  radius: 'Corner radius',
+  padding: 'Padding',
+  shadow: 'Shadow',
+  button: 'Button defaults',
+  active_color: 'Accent colour',
+  icon_color: 'Icon colour',
+  icon_size: 'Icon size',
+  label_size: 'Label size',
+  show_name: 'Show name',
+  show_state: 'Show state',
+  press_effect: 'Press effect',
+  animation: 'Animation',
+  type: 'Type',
+  duration: 'Duration',
+  intensity: 'Intensity',
+  when: 'Run when',
+  entity: 'Entity',
+  name: 'Name',
+  icon: 'Icon',
+  label: 'Label',
+  colspan: 'Width in slots',
+  confirmation: 'Ask for confirmation',
+  state_display: 'State text',
+  tap_action: 'Tap',
+  hold_action: 'Hold',
+  double_tap_action: 'Double tap',
+};
+
+const ACTION_TYPES = ['more-info', 'toggle', 'perform-action', 'navigate', 'url', 'assist', 'none'];
+
+const select = (name, options, mode = 'dropdown') => ({
+  name,
+  selector: { select: { mode, options } },
+});
+
+const ANIMATION_SCHEMA = [
+  select(
+    'type',
+    [...VALID_ANIMATIONS].map((value) => ({ value, label: value })),
+  ),
+  {
+    name: 'when',
+    selector: {
+      select: {
+        custom_value: true,
+        mode: 'dropdown',
+        options: [
+          { value: 'active', label: 'Entity is active' },
+          { value: 'inactive', label: 'Entity is inactive' },
+          { value: 'always', label: 'Always' },
+          { value: 'never', label: 'Never' },
+        ],
+      },
+    },
+  },
+  { name: 'duration', selector: { text: {} } },
+  { name: 'intensity', selector: { number: { min: 0, max: 3, step: 0.1, mode: 'slider' } } },
+];
+
+/** Card-level options. The buttons are handled by the list below the form. */
+const CARD_SCHEMA = [
+  { name: 'title', selector: { text: {} } },
+  {
+    type: 'expandable',
+    name: 'layout',
+    title: 'Layout',
+    icon: 'mdi:view-grid-outline',
+    schema: [
+      select('mode', [
+        { value: 'auto', label: 'Automatic' },
+        { value: 'grid', label: 'Fixed column count' },
+      ]),
+      { name: 'columns', selector: { number: { min: 1, max: 6, mode: 'box' } } },
+      { name: 'gap', selector: { number: { min: 0, max: 48, mode: 'box' } } },
+      { name: 'column_width', selector: { number: { min: 80, max: 400, mode: 'box' } } },
+      { name: 'max_columns', selector: { number: { min: 1, max: 6, mode: 'box' } } },
+      { name: 'min_button_size', selector: { number: { min: 48, max: 200, mode: 'box' } } },
+      { name: 'max_button_size', selector: { number: { min: 60, max: 400, mode: 'box' } } },
+    ],
+  },
+  {
+    type: 'expandable',
+    name: 'appearance',
+    title: 'Card appearance',
+    icon: 'mdi:palette-outline',
+    schema: [
+      { name: 'background', selector: { text: {} } },
+      { name: 'radius', selector: { number: { min: 0, max: 60, mode: 'box' } } },
+      { name: 'padding', selector: { number: { min: 0, max: 48, mode: 'box' } } },
+      { name: 'shadow', selector: { boolean: {} } },
+    ],
+  },
+  {
+    type: 'expandable',
+    name: 'button',
+    title: 'Button defaults',
+    icon: 'mdi:gesture-tap-button',
+    schema: [
+      { name: 'radius', selector: { number: { min: 0, max: 60, mode: 'box' } } },
+      { name: 'active_color', selector: { text: {} } },
+      { name: 'icon_color', selector: { text: {} } },
+      { name: 'show_name', selector: { boolean: {} } },
+      select('press_effect', [
+        { value: 'scale', label: 'Scale' },
+        { value: 'fade', label: 'Brighten' },
+        { value: 'none', label: 'None' },
+      ]),
+    ],
+  },
+  {
+    type: 'expandable',
+    name: 'animation',
+    title: 'Animation defaults',
+    icon: 'mdi:motion-outline',
+    schema: ANIMATION_SCHEMA,
+  },
+];
+
+/** One button's options, shown on its own page. */
+const BUTTON_SCHEMA = [
+  { name: 'entity', selector: { entity: {} } },
+  { name: 'name', selector: { text: {} } },
+  { name: 'icon', selector: { icon: {} } },
+  { name: 'colspan', selector: { number: { min: 1, max: 6, mode: 'box' } } },
+  {
+    type: 'expandable',
+    name: '',
+    title: 'Actions',
+    icon: 'mdi:gesture-tap',
+    schema: [
+      { name: 'tap_action', selector: { ui_action: { actions: ACTION_TYPES } } },
+      { name: 'hold_action', selector: { ui_action: { actions: ACTION_TYPES } } },
+      { name: 'double_tap_action', selector: { ui_action: { actions: ACTION_TYPES } } },
+    ],
+  },
+  {
+    type: 'expandable',
+    name: '',
+    title: 'Display',
+    icon: 'mdi:text-short',
+    schema: [
+      { name: 'show_name', selector: { boolean: {} } },
+      {
+        name: 'show_state',
+        selector: {
+          select: {
+            mode: 'dropdown',
+            options: [
+              { value: 'auto', label: 'Automatic' },
+              { value: 'true', label: 'Always' },
+              { value: 'false', label: 'Never' },
+            ],
+          },
+        },
+      },
+      { name: 'label', selector: { text: {} } },
+      { name: 'state_display', selector: { text: {} } },
+      { name: 'confirmation', selector: { boolean: {} } },
+    ],
+  },
+  {
+    type: 'expandable',
+    name: 'animation',
+    title: 'Animation',
+    icon: 'mdi:motion-outline',
+    schema: ANIMATION_SCHEMA,
+  },
+];
+
+/**
+ * Remove everything that equals the default, recursively, and drop sections
+ * that end up empty. Without this the first touch of the editor would write
+ * every option the card has into the user's YAML.
+ */
+function pruneDefaults(value, defaults) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return value;
+
+  const out = {};
+  for (const [key, entry] of Object.entries(value)) {
+    if (entry === undefined || entry === null || entry === '') continue;
+
+    const fallback = defaults ? defaults[key] : undefined;
+
+    if (entry && typeof entry === 'object' && !Array.isArray(entry) && fallback && typeof fallback === 'object') {
+      const nested = pruneDefaults(entry, fallback);
+      if (Object.keys(nested).length > 0) out[key] = nested;
+      continue;
+    }
+    if (fallback !== undefined && fallback === entry) continue;
+    out[key] = entry;
+  }
+  return out;
+}
+
+/** `show_state` round-trips through a select, which only carries strings. */
+function showStateToForm(value) {
+  if (value === true) return 'true';
+  if (value === false) return 'false';
+  return 'auto';
+}
+
+function showStateFromForm(value) {
+  if (value === 'true') return true;
+  if (value === 'false') return false;
+  return 'auto';
+}
+
+class MultiButtonCardEditor extends BaseElement {
+  constructor() {
+    super();
+    this.attachShadow({ mode: 'open' });
+    this._config = null;
+    this._hass = null;
+    /** null = the card page, a number = that button's page. */
+    this._openButton = null;
+    this._form = null;
+    this._renderedPage = undefined;
+  }
+
+  setConfig(config) {
+    this._config = { buttons: [], ...config };
+    if (!Array.isArray(this._config.buttons)) this._config.buttons = [];
+    // A button that no longer exists must not keep a page open.
+    if (this._openButton !== null && !this._config.buttons[this._openButton]) {
+      this._openButton = null;
+    }
+    this._render();
+  }
+
+  /** Lovelace assigns hass after setConfig, so this has to trigger a render. */
+  set hass(hass) {
+    this._hass = hass;
+    if (this._form) this._form.hass = hass;
+    this._render();
+  }
+
+  get hass() {
+    return this._hass;
+  }
+
+  /* --- rendering ------------------------------------------------------- */
+
+  _render() {
+    if (!this._config || !this._hass) return;
+
+    const page = this._openButton === null ? 'card' : `button:${this._openButton}`;
+    if (page !== this._renderedPage) {
+      this._renderedPage = page;
+      this._buildPage();
+      return;
+    }
+    // Same page: only refresh the data, so typing keeps the focus.
+    this._updateFormData();
+  }
+
+  _buildPage() {
+    const root = this.shadowRoot;
+    root.textContent = '';
+    this._form = null;
+
+    const style = document.createElement('style');
+    style.textContent = EDITOR_STYLES;
+    root.appendChild(style);
+
+    if (this._openButton === null) this._buildCardPage(root);
+    else this._buildButtonPage(root);
+  }
+
+  _buildCardPage(root) {
+    this._form = this._createForm(CARD_SCHEMA, this._cardFormData(), (value) =>
+      this._cardFormChanged(value),
+    );
+    root.appendChild(this._form);
+    root.appendChild(this._buildButtonList());
+  }
+
+  _buildButtonList() {
+    const wrap = document.createElement('div');
+    wrap.className = 'list';
+
+    const heading = document.createElement('div');
+    heading.className = 'heading';
+    heading.textContent = 'Buttons';
+    wrap.appendChild(heading);
+
+    this._config.buttons.forEach((button, index) => {
+      wrap.appendChild(this._buildButtonRow(button, index));
+    });
+
+    const add = document.createElement('button');
+    add.className = 'add';
+    add.type = 'button';
+    add.textContent = '+ Add button';
+    add.addEventListener('click', () => this._addButton());
+    wrap.appendChild(add);
+
+    if (this._config.buttons.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'empty';
+      empty.textContent = 'This card needs at least one button.';
+      wrap.insertBefore(empty, add);
+    }
+
+    return wrap;
+  }
+
+  _buildButtonRow(button, index) {
+    const row = document.createElement('div');
+    row.className = 'row';
+
+    const icon = document.createElement('ha-icon');
+    icon.className = 'row-icon';
+    icon.icon = typeof button.icon === 'string' ? button.icon : 'mdi:gesture-tap-button';
+
+    const label = document.createElement('button');
+    label.className = 'row-label';
+    label.type = 'button';
+    const stateObj = button.entity ? this._hass.states[button.entity] : undefined;
+    label.innerHTML = '';
+    const primary = document.createElement('span');
+    primary.className = 'row-name';
+    primary.textContent = button.name || resolveName({ name: null, entity: button.entity }, stateObj) || `Button ${index + 1}`;
+    const secondary = document.createElement('span');
+    secondary.className = 'row-entity';
+    secondary.textContent = button.entity || 'no entity';
+    label.append(primary, secondary);
+    label.addEventListener('click', () => {
+      this._openButton = index;
+      this._render();
+    });
+
+    const actions = document.createElement('div');
+    actions.className = 'row-actions';
+    actions.append(
+      this._iconButton('mdi:arrow-up', 'Move up', () => this._moveButton(index, -1), index === 0),
+      this._iconButton(
+        'mdi:arrow-down',
+        'Move down',
+        () => this._moveButton(index, 1),
+        index === this._config.buttons.length - 1,
+      ),
+      this._iconButton('mdi:delete-outline', 'Delete', () => this._deleteButton(index)),
+    );
+
+    row.append(icon, label, actions);
+    return row;
+  }
+
+  _iconButton(icon, label, onClick, disabled = false) {
+    const el = document.createElement('ha-icon-button');
+    el.setAttribute('label', label);
+    el.title = label;
+    if (disabled) el.setAttribute('disabled', '');
+    const inner = document.createElement('ha-icon');
+    inner.icon = icon;
+    el.appendChild(inner);
+    if (!disabled) el.addEventListener('click', onClick);
+    return el;
+  }
+
+  _buildButtonPage(root) {
+    const index = this._openButton;
+    const button = this._config.buttons[index] || {};
+
+    const header = document.createElement('div');
+    header.className = 'header';
+
+    const back = this._iconButton('mdi:arrow-left', 'Back', () => {
+      this._openButton = null;
+      this._render();
+    });
+    const title = document.createElement('div');
+    title.className = 'header-title';
+    title.textContent = button.name || button.entity || `Button ${index + 1}`;
+    header.append(back, title);
+    root.appendChild(header);
+
+    this._form = this._createForm(BUTTON_SCHEMA, this._buttonFormData(button), (value) =>
+      this._buttonFormChanged(value),
+    );
+    root.appendChild(this._form);
+  }
+
+  _createForm(schema, data, onChange) {
+    const form = document.createElement('ha-form');
+    // computeLabel first: assigning data is what triggers the first render, and
+    // a form rendered before it would show raw config keys as labels.
+    form.computeLabel = (item) => LABELS[item.name] || item.title || item.name;
+    form.hass = this._hass;
+    form.schema = schema;
+    form.data = data;
+    form.addEventListener('value-changed', (event) => {
+      event.stopPropagation();
+      onChange(event.detail.value);
+    });
+    return form;
+  }
+
+  _updateFormData() {
+    if (!this._form) return;
+    if (this._openButton === null) {
+      this._form.data = this._cardFormData();
+    } else {
+      this._form.data = this._buttonFormData(this._config.buttons[this._openButton] || {});
+    }
+  }
+
+  /* --- data in and out -------------------------------------------------- */
+
+  /** Defaults are shown as current values, so no control looks empty. */
+  _cardFormData() {
+    const config = this._config;
+    return {
+      title: config.title ?? '',
+      layout: { ...DEFAULT_LAYOUT, ...(config.layout || {}) },
+      appearance: { ...DEFAULT_APPEARANCE, ...(config.appearance || {}) },
+      button: { ...DEFAULT_BUTTON, ...(config.button || {}) },
+      animation: { ...DEFAULT_ANIMATION, ...(config.animation || {}) },
+    };
+  }
+
+  _cardFormChanged(value) {
+    const pruned = pruneDefaults(
+      {
+        title: value.title,
+        layout: value.layout,
+        appearance: value.appearance,
+        button: value.button,
+        animation: value.animation,
+      },
+      {
+        title: '',
+        layout: DEFAULT_LAYOUT,
+        appearance: DEFAULT_APPEARANCE,
+        button: DEFAULT_BUTTON,
+        animation: DEFAULT_ANIMATION,
+      },
+    );
+    this._commit({ ...pruned, buttons: this._config.buttons });
+  }
+
+  _buttonFormData(button) {
+    return {
+      entity: button.entity ?? '',
+      name: button.name ?? '',
+      icon: typeof button.icon === 'string' ? button.icon : '',
+      colspan: button.colspan ?? 1,
+      label: button.label ?? '',
+      state_display: button.state_display ?? '',
+      show_name: button.show_name ?? true,
+      show_state: showStateToForm(button.show_state),
+      confirmation: button.confirmation === true || (button.confirmation && typeof button.confirmation === 'object'),
+      tap_action: button.tap_action,
+      hold_action: button.hold_action,
+      double_tap_action: button.double_tap_action,
+      animation: { ...DEFAULT_ANIMATION, ...(this._config.animation || {}), ...(button.animation || {}) },
+    };
+  }
+
+  _buttonFormChanged(value) {
+    const index = this._openButton;
+    const previous = this._config.buttons[index] || {};
+
+    const next = pruneDefaults(
+      {
+        entity: value.entity,
+        name: value.name,
+        icon: value.icon,
+        colspan: value.colspan,
+        label: value.label,
+        state_display: value.state_display,
+        show_name: value.show_name,
+        show_state: showStateFromForm(value.show_state),
+        confirmation: value.confirmation,
+        tap_action: value.tap_action,
+        hold_action: value.hold_action,
+        double_tap_action: value.double_tap_action,
+        animation: value.animation,
+      },
+      {
+        colspan: 1,
+        show_name: true,
+        show_state: 'auto',
+        confirmation: false,
+        // Inherited from the card, so only a genuine deviation is written out.
+        animation: { ...DEFAULT_ANIMATION, ...(this._config.animation || {}) },
+      },
+    );
+
+    // An icon given as a state map is not editable in the form; keep it rather
+    // than letting the text field overwrite it with a blank.
+    if (previous.icon && typeof previous.icon === 'object' && !value.icon) {
+      next.icon = previous.icon;
+    }
+
+    const buttons = [...this._config.buttons];
+    buttons[index] = next;
+    this._commit({ ...this._config, buttons });
+  }
+
+  /* --- list operations -------------------------------------------------- */
+
+  _addButton() {
+    const buttons = [...this._config.buttons, { name: `Button ${this._config.buttons.length + 1}` }];
+    this._commit({ ...this._config, buttons });
+    this._openButton = buttons.length - 1;
+    this._render();
+  }
+
+  _deleteButton(index) {
+    const buttons = this._config.buttons.filter((_, i) => i !== index);
+    this._commit({ ...this._config, buttons });
+    this._renderedPage = undefined; // the list changed, rebuild it
+    this._render();
+  }
+
+  _moveButton(index, delta) {
+    const target = index + delta;
+    if (target < 0 || target >= this._config.buttons.length) return;
+    const buttons = [...this._config.buttons];
+    [buttons[index], buttons[target]] = [buttons[target], buttons[index]];
+    this._commit({ ...this._config, buttons });
+    this._renderedPage = undefined;
+    this._render();
+  }
+
+  /* --- output ----------------------------------------------------------- */
+
+  _commit(config) {
+    const next = { type: `custom:${CARD_TAG}`, ...config };
+    this._config = next;
+    this.dispatchEvent(
+      new CustomEvent('config-changed', {
+        bubbles: true,
+        composed: true,
+        detail: { config: next },
+      }),
+    );
+  }
+}
+
+const EDITOR_STYLES = `
+:host { display: block; }
+
+ha-form { display: block; }
+
+.list { margin-top: 18px; }
+
+.heading {
+  font-size: 15px;
+  font-weight: 500;
+  margin: 0 0 8px 4px;
+  color: var(--primary-text-color);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 4px 4px 10px;
+  border: 1px solid var(--divider-color, rgba(127, 127, 127, 0.3));
+  border-radius: 10px;
+  margin-bottom: 6px;
+  background: var(--card-background-color);
+}
+
+.row-icon {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  color: var(--secondary-text-color);
+  --mdc-icon-size: 22px;
+}
+
+.row-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  background: none;
+  border: 0;
+  padding: 6px 4px;
+  cursor: pointer;
+  font-family: inherit;
+  text-align: left;
+  color: inherit;
+}
+.row-label:hover .row-name { text-decoration: underline; }
+
+.row-name {
+  font-size: 14px;
+  color: var(--primary-text-color);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.row-entity {
+  font-size: 12px;
+  color: var(--secondary-text-color);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.row-actions {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  --mdc-icon-button-size: 36px;
+  --mdc-icon-size: 20px;
+  color: var(--secondary-text-color);
+}
+.row-actions ha-icon-button[disabled] { opacity: 0.3; pointer-events: none; }
+.row-actions ha-icon,
+.header ha-icon {
+  display: flex;
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+}
+
+.add {
+  width: 100%;
+  margin-top: 4px;
+  padding: 10px;
+  border: 1px dashed var(--divider-color, rgba(127, 127, 127, 0.4));
+  border-radius: 10px;
+  background: none;
+  color: var(--primary-color);
+  font-family: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+.add:hover { background: rgba(127, 127, 127, 0.08); }
+
+.empty {
+  font-size: 13px;
+  color: var(--error-color, #ff5f56);
+  margin: 0 0 8px 4px;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 8px;
+  --mdc-icon-button-size: 40px;
+  --mdc-icon-size: 22px;
+  color: var(--primary-text-color);
+}
+
+.header-title {
+  font-size: 16px;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+`;
+
+/* -------------------------------------------------------------------------- */
+/* 10. Registration                                                            */
 /* -------------------------------------------------------------------------- */
 
 /**
@@ -1695,15 +2402,21 @@ function escapeHtml(text) {
  * "I deployed the new file and nothing changed", which is why this warns
  * rather than returning quietly.
  */
-function defineOnce(tag, element) {
+/**
+ * @param announce Set on the card only. The editor would otherwise repeat the
+ *   same message and bury it.
+ */
+function defineOnce(tag, element, announce = false) {
   if (customElements.get(tag)) {
-    console.warn(
-      `[${tag}] is already registered, so this copy does nothing. You very ` +
-        `likely have two Lovelace resource entries pointing at this card. ` +
-        `Keep one under Settings > Dashboards > Resources and edit its ?v= ` +
-        `instead of adding a second entry -- otherwise whichever copy loads ` +
-        `first wins, and an update looks like it changed nothing.`,
-    );
+    if (announce) {
+      console.warn(
+        `[${tag}] is already registered, so this copy does nothing. You very ` +
+          `likely have two Lovelace resource entries pointing at this card. ` +
+          `Keep one under Settings > Dashboards > Resources and edit its ?v= ` +
+          `instead of adding a second entry -- otherwise whichever copy loads ` +
+          `first wins, and an update looks like it changed nothing.`,
+      );
+    }
     return;
   }
   customElements.define(tag, element);
@@ -1712,7 +2425,8 @@ function defineOnce(tag, element) {
 const inBrowser = typeof window !== 'undefined' && typeof customElements !== 'undefined';
 
 if (inBrowser) {
-  defineOnce(CARD_TAG, MultiButtonCard);
+  defineOnce(CARD_TAG, MultiButtonCard, true);
+  defineOnce(EDITOR_TAG, MultiButtonCardEditor);
 }
 
 if (inBrowser) {
@@ -1734,4 +2448,4 @@ if (inBrowser) {
   );
 }
 
-export { CARD_VERSION, CARD_TAG, REPO_URL, MultiButtonCard, computeGridOptions, computeContentHeight, partitionRows, computeColumns, computeCellHeight, normalizeConfig, animationActive };
+export { CARD_VERSION, CARD_TAG, REPO_URL, MultiButtonCard, MultiButtonCardEditor, pruneDefaults, computeGridOptions, computeContentHeight, partitionRows, computeColumns, computeCellHeight, normalizeConfig, animationActive };

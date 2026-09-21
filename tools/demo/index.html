@@ -36,6 +36,22 @@
     text-transform: uppercase;
   }
   .frame { /* stands in for the Lovelace column a card lives in */ }
+  pre {
+    font-size: 11px;
+    line-height: 1.45;
+    color: #a8d8a8;
+    background: #141518;
+    border: 1px solid #26272b;
+    border-radius: 8px;
+    padding: 10px;
+    margin: 0;
+    white-space: pre-wrap;
+  }
+  .form { font-size: 12px; }
+  .form label { display: flex; justify-content: space-between; gap: 8px; padding: 2px 0; }
+  .form fieldset { border: 1px solid #2c2d31; border-radius: 6px; margin: 6px 0; padding: 6px 8px; }
+  .form fieldset::before { content: attr(data-section); font-size: 11px; color: #8e8e93; }
+  .form input { width: 130px; background: #1c1d20; border: 1px solid #2c2d31; color: #e8e8ea; border-radius: 4px; padding: 2px 4px; }
   .measure {
     font-size: 12px;
     margin: 8px 0 0 2px;
@@ -58,6 +74,24 @@
 <!-- Scene: portrait tablet column -->
 <div class="scene" id="scene-portrait">
   <div class="frame" style="width: 360px"><div id="portrait-host"></div></div>
+</div>
+
+<!-- Scene: the visual editor, against the ha-form stub -->
+<div class="scene" id="scene-editor">
+  <div class="strip">
+    <div class="col" style="width: 460px">
+      <p class="caption">editor</p>
+      <div id="editor-host"></div>
+    </div>
+    <div class="col" style="width: 400px">
+      <p class="caption">a button's sub-page</p>
+      <div id="editor-sub"></div>
+    </div>
+    <div class="col" style="width: 330px">
+      <p class="caption">resulting config</p>
+      <pre id="editor-out">(edit a field)</pre>
+    </div>
+  </div>
 </div>
 
 <!-- Scene: the host is height-constrained, as in a HA sections grid cell -->
@@ -150,6 +184,86 @@ class HaStateIcon extends HaIcon {
   set hass(value) { this._hass = value; }
 }
 customElements.define('ha-state-icon', HaStateIcon);
+
+/**
+ * A deliberately plain stand-in for <ha-form>. It does NOT reproduce how Home
+ * Assistant renders the form - that cannot be checked outside HA. What it does
+ * reproduce is the contract the editor depends on: read .schema and .data,
+ * render one control per field (recursing into expandable sections), and emit
+ * value-changed with the FULL data object when a field changes.
+ */
+class HaFormStub extends HTMLElement {
+  set hass(v) { this._hass = v; }
+  set computeLabel(fn) { this._computeLabel = fn; }
+  set schema(v) { this._schema = v; this._render(); }
+  set data(v) { this._data = v; this._render(); }
+  get data() { return this._data; }
+
+  _render() {
+    if (!this._schema || !this._data) return;
+    this.innerHTML = '';
+    const list = document.createElement('div');
+    list.className = 'form';
+    this._walk(this._schema, this._data, [], list);
+    this.appendChild(list);
+  }
+
+  _walk(schema, data, path, host) {
+    for (const item of schema) {
+      if (item.type === 'expandable') {
+        // name: '' means the children write into the parent object.
+        const nextPath = item.name ? [...path, item.name] : path;
+        const nextData = item.name ? (data[item.name] || {}) : data;
+        const group = document.createElement('fieldset');
+        group.dataset.section = item.title;
+        this._walk(item.schema, nextData, nextPath, group);
+        host.appendChild(group);
+        continue;
+      }
+      host.appendChild(this._field(item, data[item.name], [...path, item.name]));
+    }
+  }
+
+  _field(item, value, path) {
+    const row = document.createElement('label');
+    row.dataset.path = path.join('.');
+    row.dataset.selector = Object.keys(item.selector || {})[0] || 'unknown';
+    row.textContent = this._computeLabel ? this._computeLabel(item) : item.name;
+
+    const input = document.createElement('input');
+    const kind = row.dataset.selector;
+    if (kind === 'boolean') {
+      input.type = 'checkbox';
+      input.checked = !!value;
+    } else {
+      input.type = kind === 'number' ? 'number' : 'text';
+      input.value = value === undefined || value === null ? '' : String(value);
+    }
+    input.addEventListener('input', () => {
+      const raw = kind === 'boolean' ? input.checked : kind === 'number' ? Number(input.value) : input.value;
+      this._write(path, raw);
+      this.dispatchEvent(new CustomEvent('value-changed', {
+        detail: { value: this._data }, bubbles: true, composed: true,
+      }));
+    });
+    row.appendChild(input);
+    return row;
+  }
+
+  _write(path, value) {
+    let target = this._data;
+    for (const key of path.slice(0, -1)) {
+      target[key] = { ...(target[key] || {}) };
+      target = target[key];
+    }
+    target[path[path.length - 1]] = value;
+  }
+}
+customElements.define('ha-form', HaFormStub);
+
+/** ha-icon-button is only a clickable wrapper as far as the editor cares. */
+class HaIconButtonStub extends HTMLElement {}
+customElements.define('ha-icon-button', HaIconButtonStub);
 
 /* ------------------------------------------------------------------ *
  * Mock hass object
@@ -260,6 +374,37 @@ const SCENES = {
         { name: 'Außen', icon: 'mdi:thermometer', entity: 'sensor.aussen_temperatur', show_state: true },
       ],
     }, document.getElementById('portrait-host'));
+  },
+
+  editor() {
+    const host = document.getElementById('editor-host');
+    const out = document.getElementById('editor-out');
+    const el = document.createElement('multi-button-card-editor');
+    el.setConfig({
+      type: 'custom:multi-button-card',
+      buttons: [
+        { name: 'Wohnzimmer', icon: 'mdi:sofa', entity: 'light.wohnzimmer' },
+        { name: 'Küche', icon: 'mdi:countertop', entity: 'light.kueche' },
+      ],
+    });
+    el.hass = hass;
+    el.addEventListener('config-changed', (e) => {
+      out.textContent = JSON.stringify(e.detail.config, null, 2);
+      el.setConfig(e.detail.config);
+    });
+    host.appendChild(el);
+    window.__editor = el;
+
+    // A second editor, parked on a button's sub-page, so one image shows both.
+    const subHost = document.getElementById('editor-sub');
+    const sub = document.createElement('multi-button-card-editor');
+    sub.setConfig({
+      type: 'custom:multi-button-card',
+      buttons: [{ name: 'Küche', icon: 'mdi:countertop', entity: 'light.kueche' }],
+    });
+    sub.hass = hass;
+    subHost.appendChild(sub);
+    requestAnimationFrame(() => sub.shadowRoot.querySelector('.row-label').click());
   },
 
   constrained() {

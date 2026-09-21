@@ -6,7 +6,17 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
-## [1.0.1] - 2026-09-21
+## [1.1.0] - 2026-09-21
+
+### Added
+
+- A visual editor, so the card no longer says "no visual editor available".
+  Card options are an `ha-form`; the buttons get their own list, because
+  `ha-form` has no concept of one. A button opens its own page with entity,
+  icon, name, width, the three actions and its animation. Buttons can be
+  added, deleted and reordered.
+- What the editor writes is pruned of anything equal to a default, so opening
+  it does not rewrite a short YAML config into a long one.
 
 ### Fixed
 

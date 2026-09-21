@@ -31,6 +31,7 @@ orphan rows and no layout jumps.
   - [Actions](#actions)
   - [Icons](#icons)
   - [Animations](#animations)
+- [The visual editor](#the-visual-editor)
 - [Examples](#examples)
 - [Behaviour details](#behaviour-details)
 - [Development](#development)
@@ -61,7 +62,7 @@ Adding it by hand instead:
    - Type: **JavaScript module**
 3. Reload the browser
 
-Confirm it loaded: the browser console prints `multi-button-card v1.0.1` on
+Confirm it loaded: the browser console prints `multi-button-card v1.1.0` on
 startup.
 
 ---
@@ -346,6 +347,25 @@ Animations are pure CSS and honour `prefers-reduced-motion: reduce`.
 
 ---
 
+## The visual editor
+
+The card ships an editor, so it can be configured by clicking rather than by
+writing YAML. Card options - layout, appearance, button defaults, animation -
+are collapsible sections. The buttons are a list below them: click one to open
+its own page with entity, icon, name, width, the three actions and its
+animation; add, delete and reorder from the list.
+
+Anything left at its default is not written to the config, so opening the
+editor on a three-line YAML card does not turn it into fifty lines.
+
+Two things stay YAML-only, because a form would make them worse rather than
+better:
+
+- **State-dependent icons** (`icon: { "on": ..., "off": ... }`). The editor
+  keeps such a mapping when you edit other fields rather than flattening it to
+  a single icon.
+- **`state_display` placeholders** beyond plain text.
+
 ## Examples
 
 Three complete configurations are in [`examples/`](examples/):
@@ -395,10 +415,18 @@ npm test                 # layout engine, config normalisation, animation condit
 ```
 
 `tools/demo/` is a harness that imports the real `multi-button-card.js` with a
-mock `hass` object and stubs for `<ha-icon>` / `<ha-state-icon>`, so the images
-in this README always show the current code. Serve the repo root and open
-`tools/demo/index.html?scene=overview` (scenes: `overview`, `counts`,
-`portrait`, `landscape`).
+mock `hass` object and stubs for `<ha-icon>`, `<ha-state-icon>` and `<ha-form>`,
+so the images in this README always show the current code. Serve the repo root
+and open `tools/demo/index.html?scene=overview`.
+
+Scenes: `overview`, `counts`, `portrait`, `landscape`, `constrained` (how the
+card behaves in a sections grid cell), `compact`, `animations`, `editor`.
+
+The `editor` scene is for development only and is deliberately not
+screenshotted: it renders against a stub, not against Home Assistant's real
+`ha-form`, so an image of it would show a form that exists nowhere. It does
+verify the wiring - schema read, `value-changed` handled, config written back,
+`config-changed` emitted.
 
 The window sizes in `tools/screenshots.sh` are measured, not guessed — if you
 add a button to a scene, re-measure and update them.
