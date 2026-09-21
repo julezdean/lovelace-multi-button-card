@@ -62,7 +62,7 @@ Adding it by hand instead:
    - Type: **JavaScript module**
 3. Reload the browser
 
-Confirm it loaded: the browser console prints `multi-button-card v1.2.0` on
+Confirm it loaded: the browser console prints `multi-button-card v1.3.0` on
 startup.
 
 ---
@@ -121,10 +121,40 @@ Button height follows the column width — `clamp(min_button_size, width / 1.25,
 max_button_size)` — which is why a single button does not become a huge tile and
 twelve buttons stay tappable.
 
-`colspan` participates in the same calculation: a button with `colspan: 2`
-occupies two slots. A row is a grid of equal tracks and a wide button spans
-several of them, so `colspan: 2` is exactly as wide as two single buttons plus
-the gap between them - not merely "about twice as wide".
+### Slots, columns and the two modes
+
+Three options answer three different questions:
+
+| | |
+|---|---|
+| `colspan` (editor: *Width in slots*) | how many slots one button occupies |
+| `layout.columns` | how many slots a row holds |
+| `layout.max_columns` | the ceiling for the count `auto` works out itself |
+
+A row is a grid of equal tracks and a wide button spans several of them, so
+`colspan: 2` is exactly as wide as two single buttons plus the gap between them
+— not merely "about twice as wide".
+
+The two modes differ in what happens once the slots are counted. `auto`
+balances the rows, which is what keeps a leftover button from sitting alone
+beside empty space. `grid` keeps the raster you asked for and fills each row to
+capacity, even if the last one ends up half empty:
+
+```yaml
+layout: { mode: grid, columns: 5 }
+buttons: [B1, B2 (colspan 2), B3, B4, B5]
+```
+
+```
+mode: grid                         mode: auto
+┌────┬─────────┬────┬────┐         ┌───────────┬───────────┐
+│ B1 │   B2    │ B3 │ B4 │         │    B1     │    B2     │
+├────┼─────────┴────┴────┘         ├───────┬───┴───┬───────┤
+│ B5 │                             │  B3   │  B4   │  B5   │
+└────┘                             └───────┴───────┴───────┘
+```
+
+![Both layout modes](docs/images/layout-modes.png)
 
 Below 96 px of button height the button switches to a horizontal inner layout —
 icon left, text right — instead of squeezing the label. This keeps a card with
@@ -174,16 +204,22 @@ outline). Neither takes the rest of the card down.
 
 | Option | Type | Default | Description |
 |---|---|---|---|
-| `mode` | `auto` \| `grid` \| `fixed` | `auto` | `auto` measures; `grid`/`fixed` use `columns` |
-| `columns` | number \| `auto` | `auto` | Column count. A number implies `mode: grid` |
+| `mode` | `auto` \| `grid` | `auto` | `auto` works the count out from the width; `grid` takes it from `columns` |
+| `columns` | number \| `auto` | `auto` | **`grid` only.** Column count. A number implies `mode: grid` |
+| `column_width` | number | `172` | **`auto` only.** The column width the automatic count aims for |
+| `max_columns` | number | `6` | **`auto` only.** Ceiling for the automatic count |
 | `gap` | number \| string | `12` | Space between buttons |
 | `min_button_size` | number | `88` | Lower bound for button height (px) |
 | `max_button_size` | number | `170` | Upper bound for button height (px) |
-| `column_width` | number | `172` | Column width the auto mode aims for |
-| `max_columns` | number | `6` | Hard ceiling regardless of width |
 
-Widen the buttons by *raising* `column_width` — that produces fewer, larger
-columns.
+In `auto`, widen the buttons by *raising* `column_width` — that produces fewer,
+larger columns, and `max_columns` caps the result.
+
+`max_columns` deliberately does **not** apply in `grid` mode: there the count is
+stated outright, and a second ceiling on top of it would only be a way to
+silently ignore what was asked for. An explicit count is capped at 12, beyond
+which nothing is a touch target any more. (`mode: fixed` is accepted as an old
+spelling of `grid`.)
 
 ### `appearance`
 
@@ -422,8 +458,8 @@ so the images in this README always show the current code. Serve the repo root
 and open `tools/demo/index.html?scene=overview`.
 
 Scenes: `overview`, `counts`, `portrait`, `landscape`, `constrained` (how the
-card behaves in a sections grid cell), `colspan` (prints the measured button
-widths, so the span arithmetic is checkable), `compact`, `animations`,
+card behaves in a sections grid cell), `colspan` (both layout modes with the
+measured widths printed, so the span arithmetic is checkable), `compact`, `animations`,
 `editor`.
 
 The `editor` scene is for development only and is deliberately not

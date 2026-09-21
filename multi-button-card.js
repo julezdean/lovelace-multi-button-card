@@ -16,7 +16,7 @@
  *   9. Registration
  */
 
-const CARD_VERSION = '1.2.0';
+const CARD_VERSION = '1.3.0';
 
 /**
  * The repository is prefixed, the card tag is not: the prefix groups the repo
@@ -117,16 +117,29 @@ const CONFIRM_TIMEOUT_MS = 4000;
 /* 2. Configuration                                                           */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * The three layout options answer three different questions:
+ *
+ *   colspan       how many slots one button occupies
+ *   columns       how many slots a row holds
+ *   max_columns   the ceiling for the count `auto` works out for itself
+ *
+ * max_columns belongs to the automatic mode only. In `grid` the column count
+ * is stated outright, and a second ceiling on top of it would just be a way to
+ * silently ignore what was asked for.
+ */
 const DEFAULT_LAYOUT = {
-  mode: 'auto', // auto | grid | fixed
+  mode: 'auto', // auto | grid  ('fixed' is accepted as an old spelling of grid)
   columns: 'auto',
-  rows: null,
   gap: 12,
   min_button_size: 88, // minimum cell height in px
   max_button_size: 170, // maximum cell height in px
   column_width: 172, // target column width the auto mode aims for
-  max_columns: 6,
+  max_columns: 6, // auto mode only
 };
+
+/** Above this a touch target cannot survive, whatever the config says. */
+const COLUMN_LIMIT = 12;
 
 const DEFAULT_APPEARANCE = {
   background: null, // null -> HA card background
@@ -430,6 +443,11 @@ function applyStateTemplate(template, hass, stateObj, name) {
 /* 4. Layout engine                                                           */
 /* -------------------------------------------------------------------------- */
 
+/** `fixed` was the old spelling; both mean "the user stated the column count". */
+function isStrictGrid(layout) {
+  return layout.mode === 'grid' || layout.mode === 'fixed';
+}
+
 /**
  * How many columns fit, given the measured width.
  * The result is clamped by the total weight so three buttons never spread
@@ -439,10 +457,13 @@ function computeColumns(config, totalWeight, width) {
   const { layout } = config;
   const hardMax = Math.max(1, Math.min(layout.max_columns, totalWeight));
 
-  if (layout.mode === 'grid' || layout.mode === 'fixed') {
+  if (isStrictGrid(layout)) {
     const requested = Number(layout.columns);
     if (Number.isFinite(requested) && requested > 0) {
-      return Math.max(1, Math.round(requested));
+      // Deliberately not clamped by max_columns: that option tunes the
+      // automatic count, and applying it here would quietly override the
+      // column count the user spelled out.
+      return Math.max(1, Math.min(COLUMN_LIMIT, Math.round(requested)));
     }
   }
 
@@ -463,10 +484,33 @@ function computeColumns(config, totalWeight, width) {
  * balancing and the spanning.
  *
  * 3 buttons / 2 columns -> [[0,1],[2]]            (the last one spans the row)
+ *
+ * With `strict` the balancing is off and rows are simply filled to capacity.
  * 5 buttons / 2 columns -> [[0,1],[2,3],[4]]
  * 7 buttons / 3 columns -> [[0,1,2],[3,4],[5,6]]   (never [3,3,1])
  */
-function partitionRows(weights, columns) {
+function partitionRows(weights, columns, strict = false) {
+  // Stated column count: fill each row to capacity and start a new one. No
+  // balancing - "5 columns" has to mean five columns, even if that leaves the
+  // last row half empty.
+  if (strict) {
+    const rows = [];
+    let row = [];
+    let used = 0;
+    weights.forEach((rawWeight, index) => {
+      const weight = Math.min(rawWeight, columns);
+      if (row.length > 0 && used + weight > columns) {
+        rows.push(row);
+        row = [];
+        used = 0;
+      }
+      row.push(index);
+      used += weight;
+    });
+    if (row.length > 0) rows.push(row);
+    return rows;
+  }
+
   const total = weights.reduce((sum, weight) => sum + Math.min(weight, columns), 0);
   const rowCount = Math.max(1, Math.ceil(total / columns));
 
@@ -553,7 +597,7 @@ function computeContentHeight(config, width) {
   const weights = config.buttons.map((button) => button.weight);
   const totalWeight = weights.reduce((sum, weight) => sum + weight, 0);
   const columns = computeColumns(config, totalWeight, innerWidth);
-  const rows = partitionRows(weights, columns).length;
+  const rows = partitionRows(weights, columns, isStrictGrid(config.layout)).length;
   const cellHeight = computeCellHeight(config, columns, innerWidth);
 
   const title = config.title ? 33 : 0; // font-size 15 * 1.2 + margins
@@ -1305,7 +1349,8 @@ class MultiButtonCard extends BaseElement {
     this._lastColumns = columns;
     this._lastCellHeight = cellHeight;
 
-    const rows = partitionRows(weights, columns);
+    const strict = isStrictGrid(layout);
+    const rows = partitionRows(weights, columns, strict);
 
     this._gridEl.style.setProperty('--mbc-gap', cssLength(layout.gap, '12px'));
     this._gridEl.style.setProperty('--mbc-cell-h', `${cellHeight}px`);
@@ -1330,13 +1375,16 @@ class MultiButtonCard extends BaseElement {
         cell.root.style.gridColumn = `span ${weight}`;
         rowEl.appendChild(cell.root);
       });
-      // Equal tracks, one per slot the row holds. minmax(0, 1fr) rather than
-      // 1fr so a long label cannot push a track wider than its share.
+      // Equal tracks: one per slot the row holds, or the full stated column
+      // count in a strict grid - there the last row stays left-aligned in the
+      // same raster rather than stretching to fill the width. minmax(0, 1fr)
+      // rather than 1fr so a long label cannot push a track past its share.
       const rowWeight = row.reduce(
         (sum, buttonIndex) => sum + Math.min(weights[buttonIndex], columns),
         0,
       );
-      rowEl.style.gridTemplateColumns = `repeat(${rowWeight}, minmax(0, 1fr))`;
+      const tracks = strict ? columns : rowWeight;
+      rowEl.style.gridTemplateColumns = `repeat(${tracks}, minmax(0, 1fr))`;
       rowElements.push(rowEl);
     });
     this._gridEl.replaceChildren(...rowElements);
@@ -1728,7 +1776,7 @@ const LABELS = {
   columns: 'Columns',
   gap: 'Gap between buttons',
   column_width: 'Target column width',
-  max_columns: 'Maximum columns',
+  max_columns: 'Maximum columns (automatic mode)',
   min_button_size: 'Minimum button height',
   max_button_size: 'Maximum button height',
   appearance: 'Card appearance',
@@ -1792,8 +1840,14 @@ const ANIMATION_SCHEMA = [
   { name: 'intensity', selector: { number: { min: 0, max: 3, step: 0.1, mode: 'slider' } } },
 ];
 
-/** Card-level options. The buttons are handled by the list below the form. */
-const CARD_SCHEMA = [
+/**
+ * Card-level options. The buttons are handled by the list below the form.
+ *
+ * The layout section depends on the mode, because `columns` does nothing in
+ * `auto` and `max_columns` does nothing in `grid`. Showing a control that
+ * cannot take effect is worse than showing none.
+ */
+const cardSchema = (mode) => [
   { name: 'title', selector: { text: {} } },
   {
     type: 'expandable',
@@ -1805,10 +1859,13 @@ const CARD_SCHEMA = [
         { value: 'auto', label: 'Automatic' },
         { value: 'grid', label: 'Fixed column count' },
       ]),
-      { name: 'columns', selector: { number: { min: 1, max: 6, mode: 'box' } } },
+      ...(mode === 'grid'
+        ? [{ name: 'columns', selector: { number: { min: 1, max: 12, mode: 'box' } } }]
+        : [
+            { name: 'column_width', selector: { number: { min: 80, max: 400, mode: 'box' } } },
+            { name: 'max_columns', selector: { number: { min: 1, max: 12, mode: 'box' } } },
+          ]),
       { name: 'gap', selector: { number: { min: 0, max: 48, mode: 'box' } } },
-      { name: 'column_width', selector: { number: { min: 80, max: 400, mode: 'box' } } },
-      { name: 'max_columns', selector: { number: { min: 1, max: 6, mode: 'box' } } },
       { name: 'min_button_size', selector: { number: { min: 48, max: 200, mode: 'box' } } },
       { name: 'max_button_size', selector: { number: { min: 60, max: 400, mode: 'box' } } },
     ],
@@ -1982,7 +2039,10 @@ class MultiButtonCardEditor extends BaseElement {
   _render() {
     if (!this._config || !this._hass) return;
 
-    const page = this._openButton === null ? 'card' : `button:${this._openButton}`;
+    const page =
+      this._openButton === null
+        ? `card:${this._layoutMode()}`
+        : `button:${this._openButton}`;
     if (page !== this._renderedPage) {
       this._renderedPage = page;
       this._buildPage();
@@ -2005,8 +2065,13 @@ class MultiButtonCardEditor extends BaseElement {
     else this._buildButtonPage(root);
   }
 
+  _layoutMode() {
+    const mode = (this._config.layout || {}).mode || DEFAULT_LAYOUT.mode;
+    return mode === 'fixed' ? 'grid' : mode;
+  }
+
   _buildCardPage(root) {
-    this._form = this._createForm(CARD_SCHEMA, this._cardFormData(), (value) =>
+    this._form = this._createForm(cardSchema(this._layoutMode()), this._cardFormData(), (value) =>
       this._cardFormChanged(value),
     );
     root.appendChild(this._form);

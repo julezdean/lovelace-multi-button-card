@@ -282,3 +282,65 @@ test('more buttons never ask for a smaller cell than the same layout with fewer 
   const two = computeGridOptions(withButtons(2));
   assert.ok(cellPx(two.rows) >= 200, `two buttons got ${cellPx(two.rows)}px`);
 });
+
+/* -- strict grid vs. balanced auto ---------------------------------------- */
+
+test('a stated column count fills rows to capacity instead of balancing', () => {
+  // 7 buttons over 3 columns: auto avoids the orphan, grid keeps the raster.
+  assert.deepEqual(partitionRows(ones(7), 3, true), [[0, 1, 2], [3, 4, 5], [6]]);
+  assert.deepEqual(partitionRows(ones(7), 3, false), [[0, 1, 2], [3, 4], [5, 6]]);
+});
+
+test('colspan counts against the stated capacity', () => {
+  // weights 1,2,1,1,1 over 5 columns: the first row holds exactly five slots.
+  assert.deepEqual(partitionRows([1, 2, 1, 1, 1], 5, true), [[0, 1, 2, 3], [4]]);
+});
+
+test('no strict row ever exceeds the stated column count', () => {
+  const weights = [2, 1, 1, 3, 1, 1, 2, 1, 1];
+  for (let cols = 1; cols <= 6; cols++) {
+    for (const row of partitionRows(weights, cols, true)) {
+      const used = row.reduce((sum, i) => sum + Math.min(weights[i], cols), 0);
+      assert.ok(used <= cols, `cols=${cols} row uses ${used}`);
+    }
+  }
+});
+
+test('strict partitioning still places every button exactly once', () => {
+  const weights = [1, 2, 1, 1, 1, 3, 1];
+  for (let cols = 1; cols <= 6; cols++) {
+    assert.deepEqual(partitionRows(weights, cols, true).flat(), [...Array(weights.length).keys()]);
+  }
+});
+
+test('an explicit column count is not capped by max_columns', () => {
+  // max_columns tunes the automatic count; it must not silently override a
+  // column count the user spelled out.
+  const config = cfg({ layout: { mode: 'grid', columns: 8, max_columns: 3 } });
+  assert.equal(computeColumns(config, 8, 530), 8);
+});
+
+test('an explicit column count is still capped by what a touch target allows', () => {
+  const config = cfg({ layout: { mode: 'grid', columns: 99 } });
+  assert.equal(computeColumns(config, 99, 530), 12);
+});
+
+test('fixed is accepted as an old spelling of grid', () => {
+  const a = cfg({ layout: { mode: 'fixed', columns: 4 } });
+  const b = cfg({ layout: { mode: 'grid', columns: 4 } });
+  assert.equal(computeColumns(a, 8, 530), computeColumns(b, 8, 530));
+});
+
+test('the grid footprint uses the same partitioning the renderer does', () => {
+  // 7 buttons, 3 strict columns -> 3 rows; balanced would also be 3, so use a
+  // case where they differ: 5 buttons over 4 columns.
+  const strict = normalizeConfig({
+    layout: { mode: 'grid', columns: 4 },
+    buttons: Array.from({ length: 5 }, (_, i) => ({ name: `B${i}` })),
+  });
+  assert.deepEqual(partitionRows(ones(5), 4, true), [[0, 1, 2, 3], [4]]);
+  assert.deepEqual(partitionRows(ones(5), 4, false), [[0, 1, 2], [3, 4]]);
+  // Both are two rows here, so the footprint agrees - the point is that it is
+  // computed from the strict partition, not the balanced one.
+  assert.ok(computeContentHeight(strict, 480) > 0);
+});

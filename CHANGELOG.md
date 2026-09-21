@@ -6,6 +6,33 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-09-21
+
+### Changed
+
+- **`mode: grid` now keeps the raster it was given.** It used to treat
+  `columns` as a capacity and then balance the rows within it, so
+  `columns: 5` with five buttons and one `colspan: 2` came out as rows of
+  three and three rather than five and one. Balancing is what `auto` is for -
+  it is how a leftover button avoids sitting alone beside empty space - but
+  where the column count is stated outright, "five columns" has to mean five
+  columns. Rows are now filled to capacity and the last one stays left-aligned
+  in the same raster. Cards using `mode: auto`, the default, are unaffected.
+- `max_columns` applies to `auto` only, and the editor now shows it only
+  there; `columns` and `column_width` likewise appear only in the mode where
+  they do something. An explicit column count is capped at 12 instead of being
+  unbounded.
+
+### Added
+
+- Icon size and icon colour per button in the visual editor, and icon and
+  label size among the card-wide button defaults.
+
+### Removed
+
+- `layout.rows`, which was carried in the defaults from the original sketch
+  but never read by anything.
+
 ## [1.2.0] - 2026-09-21
 
 ### Added

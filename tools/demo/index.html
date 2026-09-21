@@ -78,8 +78,17 @@
 
 <!-- Scene: the user's config - colspan width and icon size -->
 <div class="scene" id="scene-colspan">
-  <div class="frame" style="width: 560px"><div id="colspan-host"></div></div>
-  <pre id="colspan-out"></pre>
+  <div class="strip">
+    <div class="col" style="width: 560px">
+      <p class="caption">mode: grid, columns: 5 - the raster is kept</p>
+      <div id="colspan-host"></div>
+      <pre id="colspan-out"></pre>
+    </div>
+    <div class="col" style="width: 560px">
+      <p class="caption">mode: auto - rows are balanced</p>
+      <div id="colspan-auto"></div>
+    </div>
+  </div>
 </div>
 
 <!-- Scene: the visual editor, against the ha-form stub -->
@@ -383,8 +392,16 @@ const SCENES = {
   },
 
   colspan() {
+    const buttons = () => [
+      { name: 'Button 1', icon: 'mdi:lightbulb', tap_action: { action: 'none' } },
+      { name: 'Button 2', icon: 'mdi:power', colspan: 2, tap_action: { action: 'none' } },
+      { name: 'Button 3', icon: 'mdi:bed' },
+      { name: 'Button 4', icon: 'mdi:bed', icon_size: 48 },
+      { name: 'Button 5', icon: 'mdi:bed', icon_size: '16px' },
+    ];
+    card({ buttons: buttons() }, document.getElementById('colspan-auto'));
     card({
-      layout: { mode: 'grid', columns: 5, max_columns: 5 },
+      layout: { mode: 'grid', columns: 5 },
       buttons: [
         { name: 'Button 1', icon: 'mdi:lightbulb', tap_action: { action: 'none' } },
         { name: 'Button 2', icon: 'mdi:power', colspan: 2, tap_action: { action: 'none' },

@@ -64,6 +64,9 @@ shoot landscape "948,354"   landscape
 # Documents that the card honours the height a sections grid cell gives it.
 shoot constrained "1560,420" constrained
 
+# Both layout modes side by side, with the measured widths printed.
+shoot colspan "1200,640" layout-modes 1
+
 # No editor screenshot: tools/demo/ renders it against a stub, not against
 # Home Assistant's real ha-form, so an image would show a form that does not
 # exist anywhere. The scene stays for development (?scene=editor).
