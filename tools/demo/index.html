@@ -81,6 +81,16 @@
 </div>
 
 <!-- Scene: per-button accent colour -->
+<div class="scene" id="scene-background">
+  <div class="frame" style="width: 520px"><div id="bg-host"></div></div>
+  <pre id="bg-out"></pre>
+</div>
+
+<div class="scene" id="scene-border">
+  <div class="frame" style="width: 460px"><div id="border-host"></div></div>
+  <pre id="border-out"></pre>
+</div>
+
 <div class="scene" id="scene-accent">
   <div class="frame" style="width: 560px"><div id="accent-host"></div></div>
   <pre id="accent-out"></pre>
@@ -505,6 +515,87 @@ const SCENES = {
         { name: 'Außen', icon: 'mdi:thermometer', entity: 'sensor.aussen_temperatur', show_state: true },
       ],
     }, document.getElementById('portrait-host'));
+  },
+
+  background() {
+    const el = card({
+      buttons: [
+        { name: 'nur background', entity: 'light.wohnzimmer', icon: 'mdi:sofa',
+          background: '#3a2f1f' },
+        { name: 'beide, aktiv', entity: 'light.wohnzimmer', icon: 'mdi:sofa',
+          background: '#3a2f1f', active_background: '#7a4f1f' },
+        { name: 'beide, inaktiv', entity: 'light.kueche', icon: 'mdi:countertop',
+          background: '#3a2f1f', active_background: '#7a4f1f' },
+        { name: 'nur active_bg, aktiv', entity: 'light.bad', icon: 'mdi:shower',
+          active_background: '#1f4f7a' },
+      ],
+    }, document.getElementById('bg-host'));
+
+    requestAnimationFrame(() => {
+      const noAnim = document.createElement('style');
+      noAnim.textContent = '* { transition: none !important; }';
+      el.shadowRoot.appendChild(noAnim);
+
+      const rows = [...el.shadowRoot.querySelectorAll('.btn')].map((b) => {
+        const cs = getComputedStyle(b);
+        return `${b.querySelector('.name').textContent.padEnd(22)} ` +
+          `active=${String(b.classList.contains('active')).padEnd(5)} ` +
+          `background=${cs.backgroundColor}`;
+      });
+      rows.push('');
+      rows.push('expected: row 2 = #7a4f1f (122,79,31), row 3 = #3a2f1f (58,47,31)');
+      document.getElementById('bg-out').textContent = rows.join('\n');
+    });
+  },
+
+  border() {
+    const host = document.getElementById('border-host');
+    const el = card({
+      buttons: [
+        { name: 'Mit Rand', entity: 'light.wohnzimmer', icon: 'mdi:sofa',
+          style: 'border: 2px solid #ff5f56; border-radius: 4px' },
+        { name: 'Wechselnd', entity: 'light.kueche', icon: 'mdi:countertop',
+          style: '[[[ return entity.state === "on" ? "border: 3px solid #5ac26b" : "" ]]]' },
+      ],
+    }, host);
+
+    requestAnimationFrame(() => {
+      // Transitions would smear every reading; this test is about the value
+      // being set and removed, not about how it animates.
+      const noAnim = document.createElement('style');
+      noAnim.textContent = '* { transition: none !important; }';
+      el.shadowRoot.appendChild(noAnim);
+
+      const btn = el.shadowRoot.querySelectorAll('.btn')[1];
+      const read = () => {
+        const cs = getComputedStyle(btn);
+        return `${cs.borderTopWidth} ${cs.borderTopStyle} ${cs.borderTopColor}`;
+      };
+      const lines = [];
+
+      // light.kueche is off, so the template returns nothing.
+      lines.push('off  -> ' + read());
+
+      // Turn it on: the template now returns a border. .btn transitions
+      // border-color over 180ms, so an immediate read still shows the old
+      // colour - the wait is about measuring, not about the card.
+      const on = { ...hass, states: { ...hass.states,
+        'light.kueche': { entity_id: 'light.kueche', state: 'on', attributes: { friendly_name: 'Küche' } } } };
+      el.hass = on;
+      lines.push('on   -> ' + read());
+
+      setTimeout(() => {
+        el.hass = hass;
+        setTimeout(() => {
+          lines.push('off  -> ' + read() + '   (must match the first line)');
+          const first = el.shadowRoot.querySelectorAll('.btn')[0];
+          const fcs = getComputedStyle(first);
+          lines.push('', 'static style button -> ' +
+            `${fcs.borderTopWidth} ${fcs.borderTopStyle} ${fcs.borderTopColor}`);
+          document.getElementById('border-out').textContent = lines.join('\n');
+        }, 300);
+      }, 300);
+    });
   },
 
   accent() {
