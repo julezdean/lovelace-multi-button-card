@@ -85,6 +85,23 @@
   <div class="frame" style="width: 360px"><div id="portrait-host"></div></div>
 </div>
 
+<!-- Scene: opaque buttons on a translucent card -->
+<div class="scene" id="scene-opaque">
+  <div id="opaque-bg" style="background-image: linear-gradient(135deg,#2b4b6f 0%,#6f4b2b 50%,#2b6f4b 100%); padding: 20px; border-radius: 12px;">
+    <div class="strip">
+      <div class="col" style="width: 300px">
+        <p class="caption" style="color:#fff">default</p><div id="op-a"></div>
+      </div>
+      <div class="col" style="width: 300px">
+        <p class="caption" style="color:#fff">button.background deckend</p><div id="op-b"></div>
+      </div>
+      <div class="col" style="width: 300px">
+        <p class="caption" style="color:#fff">card_mod auf .btn</p><div id="op-c"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Scene: does a card-mod theme reach this card? -->
 <div class="scene" id="scene-theme">
   <div class="strip">
@@ -565,6 +582,30 @@ const SCENES = {
         { name: 'Außen', icon: 'mdi:thermometer', entity: 'sensor.aussen_temperatur', show_state: true },
       ],
     }, document.getElementById('portrait-host'));
+  },
+
+  opaque() {
+    const buttons = [
+      { name: 'Wohnzimmer', entity: 'light.wohnzimmer', icon: 'mdi:sofa' },
+      { name: 'Küche', entity: 'light.kueche', icon: 'mdi:countertop' },
+    ];
+    const glass = (el) => {
+      // What the user's theme does to every card.
+      const st = document.createElement('style');
+      st.textContent = 'ha-card { background: rgba(28, 25, 22, 0.80) !important; border: none !important; }';
+      el.shadowRoot.appendChild(st);
+    };
+
+    const a = card({ buttons }, document.getElementById('op-a'));
+    const b = card({ buttons, button: { background: '#2a2724' } }, document.getElementById('op-b'));
+    const c = card({ buttons }, document.getElementById('op-c'));
+
+    requestAnimationFrame(() => {
+      [a, b, c].forEach(glass);
+      const st = document.createElement('style');
+      st.textContent = '.btn { background: #2a2724 !important; }';
+      c.shadowRoot.appendChild(st);
+    });
   },
 
   theme() {

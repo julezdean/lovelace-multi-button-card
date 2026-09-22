@@ -360,6 +360,20 @@ take when active, and like everything else it can be a template:
 
 In the editor these live under **Colours** on the button's page.
 
+**On a translucent card** — a glass theme setting `ha-card { background:
+rgba(...) }` — the buttons are translucent too, because their own surface is a
+light overlay rather than a colour. Give them one and they stop showing the
+wallpaper through:
+
+```yaml
+button:
+  background: "#2a2724"
+  active_background: "#3a332c"   # optional, if you want a distinct "on" tone
+```
+
+That is preferable to forcing it with `card_mod` and `!important`, which would
+also override `active_background` and flatten the on/off difference.
+
 **Themes** reach this card like any other. Because it renders a real `ha-card`,
 a `card-mod-card` block in your theme applies to it — `ha-card { ... }` selects
 something here. Earlier versions drew their own surface instead, which is why
@@ -622,7 +636,9 @@ mock `hass` object and stubs for `<ha-icon>`, `<ha-state-icon>` and `<ha-form>`,
 so the images in this README always show the current code. Serve the repo root
 and open `tools/demo/index.html?scene=overview`.
 
-Scenes: `overview`, `counts`, `portrait`, `landscape`, `constrained` (how the
+Scenes: `overview`, `counts`, `portrait`, `landscape`, `theme` and `opaque`
+(how a card-mod theme reaches the card, and how to keep buttons opaque under
+one), `constrained` (how the
 card behaves in a sections grid cell), `colspan` (both layout modes with the
 measured widths printed, so the span arithmetic is checkable), `visibility`, `compact`, `animations`,
 `editor`.
