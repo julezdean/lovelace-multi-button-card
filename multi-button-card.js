@@ -16,7 +16,7 @@
  *   9. Registration
  */
 
-const CARD_VERSION = '1.7.0';
+const CARD_VERSION = '1.7.1';
 
 /**
  * The repository is prefixed, the card tag is not: the prefix groups the repo
@@ -211,8 +211,11 @@ function normalizeConfig(raw) {
   const buttonDefaults = { ...DEFAULT_BUTTON, ...(raw.button || {}) };
   const animationDefaults = normalizeAnimation(raw.animation, DEFAULT_ANIMATION);
 
-  // "columns: 3" at card level is a convenient shorthand for grid mode.
-  if (layout.mode === 'auto' && typeof layout.columns === 'number') {
+  // "columns: 3" without a mode is a convenient shorthand for grid mode - but
+  // only without a mode. Applying it on top of an explicit `mode: auto` made
+  // the automatic layout unreachable for anyone who had ever set a column
+  // count, since the number stays in the configuration after switching back.
+  if (raw.layout && raw.layout.mode === undefined && typeof layout.columns === 'number') {
     layout.mode = 'grid';
   }
 
@@ -2957,6 +2960,11 @@ class MultiButtonCardEditor extends BaseElement {
   }
 
   _cardFormChanged(value) {
+    // Switching to automatic leaves `columns` behind otherwise: harmless now,
+    // but it reads as if it still applied.
+    if (value.layout && value.layout.mode === 'auto') {
+      value = { ...value, layout: { ...value.layout, columns: undefined } };
+    }
     const pruned = pruneDefaults(
       {
         title: value.title,

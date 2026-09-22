@@ -65,7 +65,7 @@ Adding it by hand instead:
    - Type: **JavaScript module**
 3. Reload the browser
 
-Confirm it loaded: the browser console prints `multi-button-card v1.7.0` on
+Confirm it loaded: the browser console prints `multi-button-card v1.7.1` on
 startup.
 
 ---
@@ -221,7 +221,7 @@ outline). Neither takes the rest of the card down.
 | Option | Type | Default | Description |
 |---|---|---|---|
 | `mode` | `auto` \| `grid` | `auto` | `auto` works the count out from the width; `grid` takes it from `columns` |
-| `columns` | number \| `auto` | `auto` | **`grid` only.** Column count. A number implies `mode: grid` |
+| `columns` | number \| `auto` | `auto` | **`grid` only.** Column count. A number on its own implies `mode: grid`, but never overrides an explicit `mode: auto` |
 | `column_width` | number | `172` | **`auto` only.** The column width the automatic count aims for |
 | `max_columns` | number | `6` | **`auto` only.** Ceiling for the automatic count |
 | `gap` | number \| string | `12` | Space between buttons |

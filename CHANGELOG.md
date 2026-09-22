@@ -6,6 +6,20 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [1.7.1] - 2026-09-22
+
+### Fixed
+
+- `mode: auto` did nothing once a column count had ever been set. A bare
+  `columns: 3` is meant to be shorthand for grid mode, but the rule also
+  applied on top of an explicit `mode: auto` - and the editor keeps `columns`
+  in the configuration when you switch back to automatic. Switching to
+  automatic therefore kept the grid, and which grid depended on the number
+  left behind: five columns put a sixth button on its own row, six columns
+  kept it in the first. The shorthand now applies only when no mode is given.
+- The editor drops a column count when the mode is set to automatic, so the
+  configuration no longer carries a number that has no effect.
+
 ## [1.7.0] - 2026-09-22
 
 ### Added

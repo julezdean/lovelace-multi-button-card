@@ -363,3 +363,35 @@ test('it defaults to vertical, and auto is accepted as the old spelling', () => 
   const legacy = normalizeConfig({ buttons: [{ layout: 'auto' }] });
   assert.notEqual(legacy.buttons[0].layout, 'horizontal');
 });
+
+/* -- mode and columns interacting ----------------------------------------- */
+
+test('an explicit mode: auto is not overridden by a leftover column count', () => {
+  // The editor leaves `columns` in the configuration when you switch back to
+  // automatic. Treating that number as "you meant grid" made the automatic
+  // layout unreachable for anyone who had ever set one.
+  const config = cfg({ layout: { mode: 'auto', columns: 5 } });
+  assert.equal(config.layout.mode, 'auto');
+  assert.notEqual(computeColumns(config, 6, 530), 5, 'the stale count must not decide');
+});
+
+test('columns without a mode is still shorthand for grid', () => {
+  const config = cfg({ layout: { columns: 5 } });
+  assert.equal(config.layout.mode, 'grid');
+  assert.equal(computeColumns(config, 6, 530), 5);
+});
+
+test('an explicit grid mode still uses its column count', () => {
+  const config = cfg({ layout: { mode: 'grid', columns: 6 } });
+  assert.equal(computeColumns(config, 6, 530), 6);
+});
+
+test('the same six buttons lay out the same way whatever columns says in auto', () => {
+  const weights = ones(6);
+  const shapes = [undefined, 2, 5, 6].map((columns) => {
+    const config = cfg({ layout: columns === undefined ? { mode: 'auto' } : { mode: 'auto', columns } });
+    const cols = computeColumns(config, 6, 530);
+    return JSON.stringify(partitionRows(weights, cols, false).map((r) => r.length));
+  });
+  assert.equal(new Set(shapes).size, 1, `auto should ignore columns entirely, got ${shapes}`);
+});
