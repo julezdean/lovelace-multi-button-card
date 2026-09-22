@@ -16,7 +16,7 @@
  *   9. Registration
  */
 
-const CARD_VERSION = '1.5.1';
+const CARD_VERSION = '1.6.0';
 
 /**
  * The repository is prefixed, the card tag is not: the prefix groups the repo
@@ -141,11 +141,19 @@ const DEFAULT_LAYOUT = {
 /** Above this a touch target cannot survive, whatever the config says. */
 const COLUMN_LIMIT = 12;
 
+/**
+ * The card renders a real <ha-card>, so background, corner radius and shadow
+ * come from the active theme unless the configuration overrides them. They
+ * default to null rather than to a value of their own: writing a default would
+ * silently beat the theme, which is exactly what made this card the one that
+ * ignored it. `padding` is the card's own inner spacing and has no theme
+ * equivalent, so it keeps a real default.
+ */
 const DEFAULT_APPEARANCE = {
-  background: null, // null -> HA card background
-  radius: 24,
+  background: null,
+  radius: null,
   padding: 14,
-  shadow: true,
+  shadow: null,
 };
 
 const DEFAULT_BUTTON = {
@@ -1031,8 +1039,7 @@ const STYLES = `
      parent -- masonry, a panel -- 100% resolves to auto and nothing changes. */
   height: 100%;
 
-  /* Surfaces - all derived from HA theme variables so themes keep working. */
-  --mbc-card-bg: var(--ha-card-background, var(--card-background-color, #1c1c1e));
+  /* Button surfaces. The card surface itself is ha-card's business. */
   /* Each pair: a plain rgba fallback first, then the color-mix refinement.
      Wall tablets often run old webviews, where the second line is dropped. */
   --mbc-btn-bg: rgba(255, 255, 255, 0.06);
@@ -1063,7 +1070,6 @@ const STYLES = `
   /* Written by the layout engine. */
   --mbc-gap: 12px;
   --mbc-cell-h: 120px;
-  --mbc-radius: 24px;
   --mbc-btn-radius: 18px;
   --mbc-icon-size: 30px;
   --mbc-label-size: 14px;
@@ -1071,20 +1077,15 @@ const STYLES = `
   --mbc-anim-d: 2s;
 }
 
-.card {
+/* ha-card supplies background, radius, border and shadow from the theme.
+   Only layout is set here. */
+ha-card.card {
   box-sizing: border-box;
-  background: var(--mbc-card-bg);
-  border-radius: var(--mbc-radius);
   padding: var(--mbc-pad, 14px);
   height: 100%;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  /* A single hairline instead of a heavy border - reads as glass, not as a box. */
-  border: 1px solid color-mix(in srgb, var(--mbc-text) 7%, transparent);
-}
-.card.with-shadow {
-  box-shadow: var(--ha-card-box-shadow, 0 2px 16px rgba(0, 0, 0, 0.22));
 }
 
 .title {
@@ -1354,9 +1355,9 @@ const STYLES = `
 
 .error {
   box-sizing: border-box;
-  background: var(--mbc-card-bg);
+  background: var(--ha-card-background, var(--card-background-color, #1c1c1e));
   border: 1px solid var(--mbc-warn);
-  border-radius: var(--mbc-radius);
+  border-radius: var(--ha-card-border-radius, 12px);
   padding: 16px;
   color: var(--mbc-text);
   font-size: 14px;
@@ -1561,10 +1562,17 @@ class MultiButtonCard extends BaseElement {
 
     const { appearance, layout } = this._config;
 
-    const card = document.createElement('div');
-    card.className = 'card' + (appearance.shadow ? ' with-shadow' : '');
-    if (appearance.background) card.style.setProperty('--mbc-card-bg', appearance.background);
-    card.style.setProperty('--mbc-radius', cssLength(appearance.radius, '24px'));
+    // A real ha-card: themes and card_mod address `ha-card`, so anything else
+    // leaves this card out of whatever the dashboard has set up.
+    const card = document.createElement('ha-card');
+    card.className = 'card';
+    // Only override what the configuration actually asked for; everything else
+    // is left to the theme.
+    if (appearance.background) card.style.setProperty('--ha-card-background', appearance.background);
+    if (appearance.radius !== null && appearance.radius !== undefined) {
+      card.style.setProperty('--ha-card-border-radius', cssLength(appearance.radius, '12px'));
+    }
+    if (appearance.shadow === false) card.style.setProperty('--ha-card-box-shadow', 'none');
     card.style.setProperty('--mbc-pad', cssLength(appearance.padding, '14px'));
     card.style.setProperty('--mbc-gap', cssLength(layout.gap, '12px'));
     this._cardEl = card;

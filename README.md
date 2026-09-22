@@ -65,7 +65,7 @@ Adding it by hand instead:
    - Type: **JavaScript module**
 3. Reload the browser
 
-Confirm it loaded: the browser console prints `multi-button-card v1.5.1` on
+Confirm it loaded: the browser console prints `multi-button-card v1.6.0` on
 startup.
 
 ---
@@ -226,12 +226,16 @@ spelling of `grid`.)
 
 ### `appearance`
 
+The card renders a real `<ha-card>`, so its surface, corner radius, outline and
+shadow come from the active theme. These options override the theme where you
+want them to; left unset, they stay out of its way.
+
 | Option | Type | Default | Description |
 |---|---|---|---|
-| `background` | CSS colour | HA card background | Card surface |
-| `radius` | number \| string | `24` | Card corner radius |
-| `padding` | number \| string | `14` | Inner padding |
-| `shadow` | boolean | `true` | Card shadow |
+| `background` | CSS colour | from the theme | Sets `--ha-card-background` |
+| `radius` | number \| string | from the theme | Sets `--ha-card-border-radius` |
+| `padding` | number \| string | `14` | Inner padding — the card's own, no theme equivalent |
+| `shadow` | boolean | from the theme | `false` sets `--ha-card-box-shadow: none` |
 
 ### `button` (defaults for all buttons)
 
@@ -355,6 +359,11 @@ take when active, and like everything else it can be a template:
 ```
 
 In the editor these live under **Colours** on the button's page.
+
+**Themes** reach this card like any other. Because it renders a real `ha-card`,
+a `card-mod-card` block in your theme applies to it — `ha-card { ... }` selects
+something here. Earlier versions drew their own surface instead, which is why
+this card was the one that ignored the theme.
 
 **card_mod** works too, and does not need anything per button. It targets the
 card element and injects into this card's shadow root, so a selector reaches a

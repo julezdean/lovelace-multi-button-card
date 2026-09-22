@@ -16,6 +16,11 @@
     --state-active-color: #ffc107;
     --error-color: #ff5f56;
     --ha-card-box-shadow: 0 2px 16px rgba(0, 0, 0, 0.28);
+    /* ha-card falls back to these for its outline; every real theme sets
+       them, so leaving them out here would show a border no user ever sees. */
+    --divider-color: rgba(225, 225, 225, 0.12);
+    --ha-card-border-color: rgba(225, 225, 225, 0.12);
+    --ha-card-border-radius: 16px;
   }
   html, body {
     margin: 0;
@@ -78,6 +83,21 @@
 <!-- Scene: portrait tablet column -->
 <div class="scene" id="scene-portrait">
   <div class="frame" style="width: 360px"><div id="portrait-host"></div></div>
+</div>
+
+<!-- Scene: does a card-mod theme reach this card? -->
+<div class="scene" id="scene-theme">
+  <div class="strip">
+    <div class="col" style="width: 420px">
+      <p class="caption">ohne Theme</p>
+      <div id="theme-plain"></div>
+    </div>
+    <div class="col" style="width: 420px">
+      <p class="caption">mit card-mod-card aus dem Theme</p>
+      <div id="theme-modded"></div>
+    </div>
+  </div>
+  <pre id="theme-out"></pre>
 </div>
 
 <!-- Scene: per-button accent colour -->
@@ -401,6 +421,36 @@ class HaYamlEditorStub extends HTMLElement {
 }
 customElements.define('ha-yaml-editor', HaYamlEditorStub);
 
+/**
+ * Stand-in for ha-card, with the same theme variables the real one reads.
+ * Without it the harness would not show what a theme does to the card.
+ */
+class HaCardStub extends HTMLElement {
+  constructor() {
+    // In the constructor, the way Lit sets a shadow root up: attaching it on
+    // connect left the styles out of the first layout pass.
+    super();
+    const root = this.attachShadow({ mode: 'open' });
+    const style = document.createElement('style');
+    style.textContent = `
+      :host {
+        background: var(--ha-card-background, var(--card-background-color, white));
+        border-radius: var(--ha-card-border-radius, 12px);
+        border-width: var(--ha-card-border-width, 1px);
+        border-style: solid;
+        border-color: var(--ha-card-border-color, var(--divider-color, #e0e0e0));
+        box-shadow: var(--ha-card-box-shadow, none);
+        color: var(--primary-text-color);
+        display: block;
+        transition: all 0.3s ease-out 0s;
+        position: relative;
+      }
+    `;
+    root.append(style, document.createElement('slot'));
+  }
+}
+customElements.define('ha-card', HaCardStub);
+
 /** ha-icon-button is only a clickable wrapper as far as the editor cares. */
 class HaIconButtonStub extends HTMLElement {}
 customElements.define('ha-icon-button', HaIconButtonStub);
@@ -515,6 +565,48 @@ const SCENES = {
         { name: 'Außen', icon: 'mdi:thermometer', entity: 'sensor.aussen_temperatur', show_state: true },
       ],
     }, document.getElementById('portrait-host'));
+  },
+
+  theme() {
+    const buttons = [
+      { name: 'Wohnzimmer', entity: 'light.wohnzimmer', icon: 'mdi:sofa' },
+      { name: 'Küche', entity: 'light.kueche', icon: 'mdi:countertop' },
+    ];
+    const plain = card({ buttons }, document.getElementById('theme-plain'));
+    const modded = card({ buttons }, document.getElementById('theme-modded'));
+
+    requestAnimationFrame(() => {
+      // Exactly what card-mod does with card-mod-card: put the theme's styles
+      // into the card element's shadow root.
+      const themeStyle = document.createElement('style');
+      themeStyle.textContent = `
+        ha-card {
+          background: rgba(28, 25, 22, 0.80) !important;
+          border: none !important;
+          display: flex;
+          flex-direction: column;
+          justify-content: space-between;
+        }
+        :host, ha-card { height: 100%; }
+      `;
+      modded.shadowRoot.appendChild(themeStyle);
+
+      const read = (el, label) => {
+        const c = el.shadowRoot.querySelector('ha-card');
+        if (!c) return `${label}: no ha-card in this card!`;
+        const cs = getComputedStyle(c);
+        return `${label.padEnd(11)} bg=${cs.backgroundColor}  border=${cs.borderTopWidth} ${cs.borderTopStyle}\n` +
+          `${''.padEnd(11)} shadowRoot=${!!c.shadowRoot}  ` +
+          `--ha-card-background="${cs.getPropertyValue('--ha-card-background').trim()}"  ` +
+          `radius=${cs.borderRadius}`;
+      };
+      document.getElementById('theme-out').textContent = [
+        read(plain, 'ohne Theme'),
+        read(modded, 'mit Theme'),
+        '',
+        'expected with theme: background=rgba(28, 25, 22, 0.8), border=0px none',
+      ].join('\n');
+    });
   },
 
   background() {

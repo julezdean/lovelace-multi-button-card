@@ -6,6 +6,24 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-09-22
+
+### Changed
+
+- **The card renders a real `<ha-card>`.** It used to draw its own surface -
+  a plain div with its own background, radius, hairline and shadow - which
+  made it the one card on a dashboard that ignored the theme: a
+  `card-mod-card` block selecting `ha-card { ... }` had nothing to select
+  here, so themes styling every other card left this one untouched.
+- Following from that, `appearance.background`, `radius` and `shadow` no
+  longer carry defaults of their own. A default would silently beat the theme,
+  which is the problem this release fixes. Set them and they override the
+  theme as before; leave them out and the theme decides. `padding` keeps its
+  default, being the card's own inner spacing with no theme equivalent.
+- Visible consequence without a theme: the card picks up Home Assistant's
+  corner radius rather than the 24px it used to insist on, and its outline
+  comes from `--ha-card-border-color`.
+
 ## [1.5.1] - 2026-09-22
 
 ### Fixed
