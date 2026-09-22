@@ -604,6 +604,8 @@ const SCENES = {
     const probe = document.createElement('multi-button-card-editor');
     probe.setConfig({
       type: 'custom:multi-button-card',
+      // What Home Assistant writes when the card is sized in a section.
+      grid_options: { columns: 'full', rows: 'auto' },
       buttons: [{
         name: 'Bedingt',
         entity: 'light.kueche',
@@ -621,7 +623,11 @@ const SCENES = {
       nameInput.value = 'Umbenannt';
       nameInput.dispatchEvent(new Event('input', { bubbles: true }));
       const out = document.getElementById('editor-out');
-      const lines = ['rename keeps what the form cannot model:',
+      const full = probe._config;
+      const lines = [
+        'grid_options after an edit: ' + JSON.stringify(full.grid_options),
+        '',
+        'rename keeps what the form cannot model:',
         JSON.stringify(kept, null, 2)];
 
       // Now drive the conditions editor itself.

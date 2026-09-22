@@ -6,6 +6,20 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [1.4.1] - 2026-09-22
+
+### Fixed
+
+- The visual editor reset the card's size in a section. Home Assistant writes
+  `grid_options` itself when the card is resized there, but the editor rebuilt
+  the configuration from the fixed set of keys its own form knows about - so
+  every edit dropped `grid_options`, and the card fell back to the default
+  twelve columns. It now starts from the existing configuration and replaces
+  only the keys its form is responsible for, which also covers `view_layout`
+  and anything a future Home Assistant version adds.
+- The same applies per button, where it replaces the special cases that were
+  keeping visibility conditions and state-dependent icon maps alive one by one.
+
 ## [1.4.0] - 2026-09-21
 
 ### Added

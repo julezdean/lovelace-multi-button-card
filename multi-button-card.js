@@ -16,7 +16,7 @@
  *   9. Registration
  */
 
-const CARD_VERSION = '1.4.0';
+const CARD_VERSION = '1.4.1';
 
 /**
  * The repository is prefixed, the card tag is not: the prefix groups the repo
@@ -2221,6 +2221,47 @@ function pruneDefaults(value, defaults) {
   return out;
 }
 
+/**
+ * Write form output back into a config without losing anything the form does
+ * not model.
+ *
+ * A form knows a fixed set of keys. Rebuilding the object from just those keys
+ * silently drops everything else - and on a Lovelace card "everything else"
+ * includes `grid_options`, which Home Assistant itself writes when the user
+ * sizes the card in a section. Losing it resets the card to the default width
+ * on the next edit.
+ *
+ * So: start from what is already there, remove only the keys this form owns,
+ * then apply the new values.
+ */
+function mergeOwnedKeys(previous, ownedKeys, values) {
+  const next = { ...previous };
+  ownedKeys.forEach((key) => delete next[key]);
+  return { ...next, ...values };
+}
+
+/** The card-level keys the editor's form is responsible for. */
+const CARD_FORM_KEYS = ['title', 'layout', 'appearance', 'button', 'animation'];
+
+/** The per-button keys the button form is responsible for. */
+const BUTTON_FORM_KEYS = [
+  'entity',
+  'name',
+  'icon',
+  'colspan',
+  'label',
+  'state_display',
+  'icon_size',
+  'icon_color',
+  'show_name',
+  'show_state',
+  'confirmation',
+  'tap_action',
+  'hold_action',
+  'double_tap_action',
+  'animation',
+];
+
 /** `show_state` round-trips through a select, which only carries strings. */
 function showStateToForm(value) {
   if (value === true) return 'true';
@@ -2542,7 +2583,7 @@ class MultiButtonCardEditor extends BaseElement {
         animation: DEFAULT_ANIMATION,
       },
     );
-    this._commit({ ...pruned, buttons: this._config.buttons });
+    this._commit(mergeOwnedKeys(this._config, CARD_FORM_KEYS, pruned));
   }
 
   _buttonFormData(button) {
@@ -2599,17 +2640,18 @@ class MultiButtonCardEditor extends BaseElement {
       },
     );
 
+    // Anything the form does not model - visibility conditions above all -
+    // is carried through by mergeOwnedKeys rather than listed here.
+    const merged = mergeOwnedKeys(previous, BUTTON_FORM_KEYS, next);
+
     // An icon given as a state map is not editable in the form; keep it rather
     // than letting the text field overwrite it with a blank.
     if (previous.icon && typeof previous.icon === 'object' && !value.icon) {
-      next.icon = previous.icon;
+      merged.icon = previous.icon;
     }
-    // Same for anything the form does not model: carry it through untouched.
-    if (previous.visibility !== undefined) next.visibility = previous.visibility;
-    if (previous.conditions !== undefined) next.conditions = previous.conditions;
 
     const buttons = [...this._config.buttons];
-    buttons[index] = next;
+    buttons[index] = merged;
     this._commit({ ...this._config, buttons });
   }
 
@@ -2852,4 +2894,4 @@ if (inBrowser) {
   );
 }
 
-export { CARD_VERSION, CARD_TAG, REPO_URL, MultiButtonCard, isVisible, conditionMet, collectMediaQueries, MultiButtonCardEditor, pruneDefaults, computeGridOptions, computeContentHeight, partitionRows, computeColumns, computeCellHeight, normalizeConfig, animationActive };
+export { CARD_VERSION, CARD_TAG, REPO_URL, MultiButtonCard, mergeOwnedKeys, CARD_FORM_KEYS, BUTTON_FORM_KEYS, isVisible, conditionMet, collectMediaQueries, MultiButtonCardEditor, pruneDefaults, computeGridOptions, computeContentHeight, partitionRows, computeColumns, computeCellHeight, normalizeConfig, animationActive };

@@ -8,7 +8,14 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { pruneDefaults, normalizeConfig, CARD_TAG } from '../multi-button-card.js';
+import {
+  pruneDefaults,
+  normalizeConfig,
+  CARD_TAG,
+  mergeOwnedKeys,
+  CARD_FORM_KEYS,
+  BUTTON_FORM_KEYS,
+} from '../multi-button-card.js';
 
 /* -- pruning -------------------------------------------------------------- */
 
@@ -99,4 +106,54 @@ test('an action edited to none is kept, not pruned back to a default', () => {
     buttons: [{ entity: 'light.a', hold_action: { action: 'none' } }],
   });
   assert.equal(config.buttons[0].hold_action.action, 'none');
+});
+
+/* -- the editor must not drop what it does not know ----------------------- */
+
+test('keys the form does not model survive an edit', () => {
+  // grid_options is written by Home Assistant itself when the user sizes the
+  // card in a section. Losing it resets the card to the default width on the
+  // next edit, which is exactly what happened before this was fixed.
+  const previous = {
+    type: `custom:${CARD_TAG}`,
+    grid_options: { columns: 'full', rows: 'auto' },
+    view_layout: { position: 'sidebar' },
+    layout: { gap: 12 },
+    buttons: [{ name: 'a' }],
+  };
+  const merged = mergeOwnedKeys(previous, CARD_FORM_KEYS, { layout: { gap: 20 } });
+
+  assert.deepEqual(merged.grid_options, { columns: 'full', rows: 'auto' });
+  assert.deepEqual(merged.view_layout, { position: 'sidebar' });
+  assert.deepEqual(merged.layout, { gap: 20 }, 'the owned key is replaced');
+  assert.deepEqual(merged.buttons, [{ name: 'a' }]);
+  assert.equal(merged.type, `custom:${CARD_TAG}`);
+});
+
+test('an owned key set back to its default is removed, not kept stale', () => {
+  const previous = { title: 'Old', grid_options: { columns: 6 } };
+  // pruneDefaults dropped `title`, so it must not survive from `previous`.
+  const merged = mergeOwnedKeys(previous, CARD_FORM_KEYS, {});
+  assert.equal('title' in merged, false);
+  assert.deepEqual(merged.grid_options, { columns: 6 });
+});
+
+test('per-button keys the form does not model survive too', () => {
+  const previous = {
+    name: 'Old',
+    visibility: [{ condition: 'state', entity: 'light.a', state: 'on' }],
+    some_future_option: 42,
+  };
+  const merged = mergeOwnedKeys(previous, BUTTON_FORM_KEYS, { name: 'New' });
+
+  assert.equal(merged.name, 'New');
+  assert.deepEqual(merged.visibility, [{ condition: 'state', entity: 'light.a', state: 'on' }]);
+  assert.equal(merged.some_future_option, 42);
+});
+
+test('mergeOwnedKeys does not mutate what it was given', () => {
+  const previous = { layout: { gap: 12 }, grid_options: { columns: 6 } };
+  const merged = mergeOwnedKeys(previous, CARD_FORM_KEYS, { layout: { gap: 20 } });
+  assert.deepEqual(previous.layout, { gap: 12 }, 'original untouched');
+  assert.notEqual(merged, previous);
 });
