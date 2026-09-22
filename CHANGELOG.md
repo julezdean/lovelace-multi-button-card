@@ -6,6 +6,29 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-09-22
+
+### Added
+
+- `button.layout`, `vertical` or `horizontal`, deciding whether the icon sits
+  above or beside the text. Settable per card and per button.
+
+### Changed
+
+- **The inner arrangement no longer switches by itself.** A button used to flip
+  to icon-beside-text once it fell below 96px tall, which is why the same
+  configuration looked different on two screens. The guess was usually wrong as
+  well: beside a 26px icon a narrow button leaves the label a fraction of its
+  width, where stacking gives it all of it. Horizontal earns its place on
+  buttons that are wide *and* flat, and the card cannot tell those apart -
+  the height it works from is derived from the width, so the two are never
+  distinguishable, and reading the rendered height instead would feed the
+  layout back into itself. The default is `vertical`; `auto` is still accepted
+  and means the same.
+- Names wrap onto a second line instead of being cut off. A clipped "Ha..."
+  says less than a wrapped name, and hiding the name entirely is already
+  available through `show_name: false`.
+
 ## [1.6.0] - 2026-09-22
 
 ### Changed

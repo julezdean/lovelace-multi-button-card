@@ -1,6 +1,6 @@
 {
   "name": "lovelace-multi-button-card",
-  "version": "1.6.0",
+  "version": "1.7.0",
   "description": "Multi-button control card for Home Assistant, tuned for wall-mounted dashboards",
   "type": "module",
   "main": "multi-button-card.js",

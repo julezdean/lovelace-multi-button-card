@@ -65,7 +65,7 @@ Adding it by hand instead:
    - Type: **JavaScript module**
 3. Reload the browser
 
-Confirm it loaded: the browser console prints `multi-button-card v1.6.0` on
+Confirm it loaded: the browser console prints `multi-button-card v1.7.0` on
 startup.
 
 ---
@@ -159,10 +159,23 @@ mode: grid                         mode: auto
 
 ![Both layout modes](docs/images/layout-modes.png)
 
-Below 96 px of button height the button switches to a horizontal inner layout —
-icon left, text right — instead of squeezing the label. This keeps a card with
-ten buttons in a narrow column readable rather than cramped. The switch depends
-only on the computed cell height, so it cannot oscillate.
+Inside a button, the icon sits above the text. `button.layout: horizontal` puts
+it beside the text instead — per card or per button:
+
+```yaml
+button:
+  layout: horizontal     # vertical (default) | horizontal
+```
+
+This used to switch by itself below a certain button height. It has been made a
+decision because the guess was usually wrong: beside a 26 px icon a narrow
+button leaves the label a fraction of its width, where stacking gives it all of
+it. Horizontal earns its place on buttons that are wide *and* flat — and the
+card cannot tell those apart, since the height it works from is derived from
+the width.
+
+Names wrap onto a second line rather than being cut off. Below 74 px of column
+width the text is dropped entirely and only the icon remains.
 
 Within a row, all buttons reserve room for the state line as soon as one of them
 uses it. Otherwise the icons and names of neighbouring buttons would sit at
@@ -253,6 +266,7 @@ Every key here can also be set on an individual button, where it wins.
 | `show_name` | boolean | `true` | Show the name line |
 | `show_state` | boolean \| `auto` | `auto` | See below |
 | `press_effect` | `scale` \| `fade` \| `none` | `scale` | Touch feedback |
+| `layout` | `vertical` \| `horizontal` | `vertical` | Icon above or beside the text |
 
 **`show_state: auto`** shows the state only for domains whose state carries a
 value — `sensor`, `climate`, `cover`, `media_player`, `lock`, … For a light or a
@@ -636,7 +650,8 @@ mock `hass` object and stubs for `<ha-icon>`, `<ha-state-icon>` and `<ha-form>`,
 so the images in this README always show the current code. Serve the repo root
 and open `tools/demo/index.html?scene=overview`.
 
-Scenes: `overview`, `counts`, `portrait`, `landscape`, `theme` and `opaque`
+Scenes: `overview`, `counts`, `portrait`, `landscape`, `inner` (icon above vs. beside the
+text), `theme` and `opaque`
 (how a card-mod theme reaches the card, and how to keep buttons opaque under
 one), `constrained` (how the
 card behaves in a sections grid cell), `colspan` (both layout modes with the

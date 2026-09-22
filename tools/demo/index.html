@@ -85,6 +85,27 @@
   <div class="frame" style="width: 360px"><div id="portrait-host"></div></div>
 </div>
 
+<!-- Scene: icon above vs. beside the text -->
+<div class="scene" id="scene-inner">
+  <div class="strip">
+    <div class="col" style="width: 500px">
+      <p class="caption">500 px, 4 Spalten - Standard (vertikal)</p><div id="in-a"></div>
+    </div>
+    <div class="col" style="width: 500px">
+      <p class="caption">500 px, 4 Spalten - layout: horizontal</p><div id="in-b"></div>
+    </div>
+  </div>
+  <div class="strip" style="margin-top: 16px">
+    <div class="col" style="width: 700px">
+      <p class="caption">700 px, 4 Spalten - layout: horizontal</p><div id="in-c"></div>
+    </div>
+    <div class="col" style="width: 300px">
+      <p class="caption">300 px - lange Namen, zweizeilig</p><div id="in-d"></div>
+    </div>
+  </div>
+  <pre id="in-out"></pre>
+</div>
+
 <!-- Scene: opaque buttons on a translucent card -->
 <div class="scene" id="scene-opaque">
   <div id="opaque-bg" style="background-image: linear-gradient(135deg,#2b4b6f 0%,#6f4b2b 50%,#2b6f4b 100%); padding: 20px; border-radius: 12px;">
@@ -582,6 +603,40 @@ const SCENES = {
         { name: 'Außen', icon: 'mdi:thermometer', entity: 'sensor.aussen_temperatur', show_state: true },
       ],
     }, document.getElementById('portrait-host'));
+  },
+
+  inner() {
+    // The user's own four buttons.
+    const four = [
+      { name: 'Haustür', entity: 'binary_sensor.fenster', icon: 'mdi:door-open', show_state: true, state_display: 'Geöffnet' },
+      { name: 'Fenster', entity: 'binary_sensor.fenster', icon: 'mdi:window-closed', show_state: true, state_display: 'Geöffnet: 1' },
+      { name: 'Bewegung', entity: 'binary_sensor.waschmaschine', icon: 'mdi:motion-sensor', show_state: true, state_display: '1 aktiv' },
+      { name: 'Regensensor', entity: 'light.kueche', icon: 'mdi:weather-rainy', show_state: true, state_display: 'kein Regen' },
+    ];
+    // Four in one row is what makes the columns narrow enough to flip.
+    const row = { mode: 'grid', columns: 4 };
+    const a = card({ layout: row, buttons: four }, document.getElementById('in-a'));
+    card({ layout: row, button: { layout: 'horizontal' }, buttons: four },
+      document.getElementById('in-b'));
+    card({ layout: row, button: { layout: 'horizontal' }, buttons: four },
+      document.getElementById('in-c'));
+    card({ buttons: [
+      { name: 'Wintergarten hinten', entity: 'light.wohnzimmer', icon: 'mdi:sofa' },
+      { name: 'Abstellkammer', entity: 'light.kueche', icon: 'mdi:broom' },
+    ] }, document.getElementById('in-d'));
+
+    requestAnimationFrame(() => {
+      const look = (el) => el.shadowRoot.querySelector('.btn').classList.contains('compact')
+        ? 'horizontal' : 'vertikal';
+      const cells = (el) => {
+        const g = el.shadowRoot.querySelector('.grid');
+        return g.style.getPropertyValue('--mbc-cell-h');
+      };
+      document.getElementById('in-out').textContent =
+        `500px, Standard               -> ${look(a)}\n` +
+        `500px, layout: horizontal      -> ${look(document.querySelector('#in-b multi-button-card'))}  (zu schmal - deshalb nicht der Standard)\n` +
+        `700px, layout: horizontal      -> ${look(document.querySelector('#in-c multi-button-card'))}  (hier sinnvoll)`;
+    });
   },
 
   opaque() {

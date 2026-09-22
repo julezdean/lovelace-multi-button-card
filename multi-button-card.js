@@ -16,7 +16,7 @@
  *   9. Registration
  */
 
-const CARD_VERSION = '1.6.0';
+const CARD_VERSION = '1.7.0';
 
 /**
  * The repository is prefixed, the card tag is not: the prefix groups the repo
@@ -168,6 +168,22 @@ const DEFAULT_BUTTON = {
   show_name: true,
   show_state: 'auto',
   press_effect: 'scale', // scale | fade | none
+  /**
+   * How the icon and the text sit together: `vertical` (icon above) or
+   * `horizontal` (icon beside).
+   *
+   * This used to switch by itself once a button fell below 96px tall, which
+   * did the wrong thing more often than not: beside a 26px icon a narrow
+   * button leaves the label a fraction of its width, where stacking gives it
+   * all of it. The automatic version also could not tell a flat-and-wide
+   * button from a flat-and-narrow one - the height it works from is derived
+   * from the width, so the two are never distinguishable, and reading the
+   * rendered height instead would feed the layout back into itself.
+   *
+   * So it is a decision, not a guess. `auto` is still accepted and means
+   * vertical.
+   */
+  layout: 'vertical', // vertical | horizontal
 };
 
 const DEFAULT_ANIMATION = {
@@ -235,6 +251,7 @@ function normalizeButton(raw, index, buttonDefaults, animationDefaults) {
     icon_size: src.icon_size ?? buttonDefaults.icon_size,
     label_size: src.label_size ?? buttonDefaults.label_size,
     press_effect: src.press_effect ?? buttonDefaults.press_effect,
+    layout: src.layout ?? buttonDefaults.layout,
     show_name: src.show_name ?? buttonDefaults.show_name,
     show_state: src.show_state ?? buttonDefaults.show_state,
     state_display: src.state_display ?? null,
@@ -282,7 +299,8 @@ function normalizeButton(raw, index, buttonDefaults, animationDefaults) {
 /**
  * The fields a template may fill. Presentation only: `entity` would break
  * state tracking, `colspan` would rebuild the layout on every update, and the
- * actions are structure rather than appearance.
+ * actions are structure rather than appearance. `layout` is read in the layout
+ * pass rather than the state sync, so a template there would never run.
  */
 const TEMPLATED_FIELDS = [
   'name',
@@ -1253,9 +1271,15 @@ ha-card.card {
   letter-spacing: 0.005em;
   color: var(--mbc-text);
   max-width: 100%;
+  /* Up to two lines, then an ellipsis. A single clipped line turns a name into
+     a fragment like "Ha..." that says less than nothing; wrapping keeps it
+     readable in the narrow columns where this actually happens. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: break-word;
 }
 
 /* When any button in a row shows a state line, every button in THAT row
@@ -1268,6 +1292,8 @@ ha-card.card {
 }
 
 .state {
+  /* One line: a state is short, and a wrapped value reads worse than a
+     shortened one. */
   font-size: calc(var(--mbc-label-size) - 2px);
   line-height: 1.2;
   color: var(--mbc-text-dim);
@@ -1766,10 +1792,11 @@ class MultiButtonCard extends BaseElement {
 
     // Cell geometry decides the inner arrangement - deterministic, so no jitter.
     const columnWidth = columns > 0 ? innerWidth / columns : innerWidth;
-    const compact = cellHeight < 96;
+
     const iconOnly = columnWidth < 74;
-    this._cells.forEach((cell) => {
-      cell.root.classList.toggle('compact', compact);
+    this._cells.forEach((cell, index) => {
+      const button = this._config.buttons[index];
+      cell.root.classList.toggle('compact', button && button.layout === 'horizontal');
       cell.root.classList.toggle('icon-only', iconOnly);
     });
     this._lastVisibleKey = visible.join(',');
@@ -2228,6 +2255,7 @@ const LABELS = {
   show_name: 'Show name',
   show_state: 'Show state',
   press_effect: 'Press effect',
+  layout: 'Icon and text',
   animation: 'Animation',
   type: 'Type',
   duration: 'Duration',
@@ -2407,6 +2435,10 @@ const cardSchema = (mode) => [
         { value: 'fade', label: 'Brighten' },
         { value: 'none', label: 'None' },
       ]),
+      select('layout', [
+        { value: 'vertical', label: 'Icon above the text' },
+        { value: 'horizontal', label: 'Icon beside the text' },
+      ]),
     ],
   },
   {
@@ -2441,6 +2473,10 @@ const BUTTON_SCHEMA = [
     title: 'Display',
     icon: 'mdi:text-short',
     schema: [
+      select('layout', [
+        { value: 'vertical', label: 'Icon above the text' },
+        { value: 'horizontal', label: 'Icon beside the text' },
+      ]),
       { name: 'show_name', selector: { boolean: {} } },
       {
         name: 'show_state',
@@ -2552,6 +2588,7 @@ const BUTTON_FORM_KEYS = [
   'hold_action',
   'double_tap_action',
   'animation',
+  'layout',
 ];
 
 /** `show_state` round-trips through a select, which only carries strings. */
@@ -2953,6 +2990,7 @@ class MultiButtonCardEditor extends BaseElement {
       background: button.background ?? '',
       active_background: button.active_background ?? '',
       style: button.style ?? '',
+      layout: button.layout ?? (this._config.button || {}).layout ?? 'vertical',
       show_name: button.show_name ?? true,
       show_state: showStateToForm(button.show_state),
       confirmation: button.confirmation === true || (button.confirmation && typeof button.confirmation === 'object'),
@@ -2981,6 +3019,7 @@ class MultiButtonCardEditor extends BaseElement {
         background: value.background,
         active_background: value.active_background,
         style: value.style,
+        layout: value.layout,
         show_name: value.show_name,
         show_state: showStateFromForm(value.show_state),
         confirmation: value.confirmation,
@@ -2994,6 +3033,7 @@ class MultiButtonCardEditor extends BaseElement {
         show_name: true,
         show_state: 'auto',
         confirmation: false,
+        layout: (this._config.button || {}).layout ?? 'vertical',
         icon_size: toNumber((this._config.button || {}).icon_size, undefined),
         icon_color: (this._config.button || {}).icon_color,
         active_color: (this._config.button || {}).active_color,

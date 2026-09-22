@@ -344,3 +344,22 @@ test('the grid footprint uses the same partitioning the renderer does', () => {
   // computed from the strict partition, not the balanced one.
   assert.ok(computeContentHeight(strict, 480) > 0);
 });
+
+/* -- icon and text arrangement -------------------------------------------- */
+
+test('the inner arrangement is a choice, not a guess', () => {
+  const config = normalizeConfig({
+    button: { layout: 'horizontal' },
+    buttons: [{ name: 'a' }, { name: 'b', layout: 'vertical' }],
+  });
+  assert.equal(config.buttons[0].layout, 'horizontal', 'card default applies');
+  assert.equal(config.buttons[1].layout, 'vertical', 'the button overrides it');
+});
+
+test('it defaults to vertical, and auto is accepted as the old spelling', () => {
+  assert.equal(normalizeConfig({ buttons: [{}] }).buttons[0].layout, 'vertical');
+  // 'auto' used to mean "switch by yourself"; it now just means vertical, and
+  // anything that is not 'horizontal' renders vertically.
+  const legacy = normalizeConfig({ buttons: [{ layout: 'auto' }] });
+  assert.notEqual(legacy.buttons[0].layout, 'horizontal');
+});
