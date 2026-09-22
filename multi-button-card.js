@@ -16,7 +16,7 @@
  *   9. Registration
  */
 
-const CARD_VERSION = '1.4.1';
+const CARD_VERSION = '1.5.0';
 
 /**
  * The repository is prefixed, the card tag is not: the prefix groups the repo
@@ -231,10 +231,16 @@ function normalizeButton(raw, index, buttonDefaults, animationDefaults) {
     show_state: src.show_state ?? buttonDefaults.show_state,
     state_display: src.state_display ?? null,
     confirmation: src.confirmation ?? false,
+    // CSS declarations for this button, e.g. "border: 2px solid red".
+    // Templated like every other presentation field.
+    style: src.style ?? null,
     // `visibility` is the sections spelling, `conditions` the conditional
     // card's. Both appear in the wild, so both are accepted.
     visibility: normalizeVisibility(src.visibility ?? src.conditions),
     weight: resolveWeight(src),
+    // Scanned once: the sync path then only builds a template context for the
+    // buttons that actually need one.
+    hasTemplates: false,
     animation: normalizeAnimation(src.animation ?? src.icon_animation, animationDefaults),
     tap_action: normalizeAction(src.tap_action ?? src.action, src.entity, 'default'),
     hold_action: normalizeAction(src.hold_action, src.entity, 'more-info'),
@@ -252,8 +258,38 @@ function normalizeButton(raw, index, buttonDefaults, animationDefaults) {
     button.hold_action = { action: 'none' };
   }
 
+  button.hasTemplates = TEMPLATED_FIELDS.some((field) => {
+    const value = button[field];
+    if (hasTemplate(value)) return true;
+    // A state-keyed icon map may hold templates in its branches.
+    if (field === 'icon' && value && typeof value === 'object') {
+      return Object.values(value).some((entry) => hasTemplate(entry));
+    }
+    return false;
+  });
+
   return button;
 }
+
+/**
+ * The fields a template may fill. Presentation only: `entity` would break
+ * state tracking, `colspan` would rebuild the layout on every update, and the
+ * actions are structure rather than appearance.
+ */
+const TEMPLATED_FIELDS = [
+  'name',
+  'label',
+  'icon',
+  'state_display',
+  'color',
+  'active_color',
+  'icon_color',
+  'background',
+  'active_background',
+  'show_name',
+  'show_state',
+  'style',
+];
 
 /** A single condition is allowed where a list is expected. */
 function normalizeVisibility(raw) {
@@ -375,17 +411,17 @@ function isActiveState(stateObj) {
  *   3. entity icon / device class icon supplied by HA
  *   4. null -> caller renders <ha-state-icon> or a neutral fallback
  */
-function resolveIcon(button, stateObj) {
+function resolveIcon(button, stateObj, resolve = (value) => value) {
   const icon = button.icon;
-  if (typeof icon === 'string') return icon;
+  if (typeof icon === 'string') return resolve(icon);
 
   if (icon && typeof icon === 'object') {
     const state = stateObj ? String(stateObj.state) : 'unknown';
-    if (icon[state] !== undefined) return icon[state];
+    if (icon[state] !== undefined) return resolve(icon[state]);
     // YAML turns bare on/off into booleans, so check those too.
-    if (state === 'on' && icon.true !== undefined) return icon.true;
-    if (state === 'off' && icon.false !== undefined) return icon.false;
-    if (icon.default !== undefined) return icon.default;
+    if (state === 'on' && icon.true !== undefined) return resolve(icon.true);
+    if (state === 'off' && icon.false !== undefined) return resolve(icon.false);
+    if (icon.default !== undefined) return resolve(icon.default);
     return null;
   }
 
@@ -395,9 +431,12 @@ function resolveIcon(button, stateObj) {
   return null;
 }
 
-function resolveName(button, stateObj) {
+function resolveName(button, stateObj, resolve = (value) => value) {
   if (button.name === false) return '';
-  if (button.name) return String(button.name);
+  if (button.name) {
+    const name = resolve(button.name);
+    return name === undefined || name === null ? '' : String(name);
+  }
   if (stateObj && stateObj.attributes && stateObj.attributes.friendly_name) {
     return stateObj.attributes.friendly_name;
   }
@@ -409,9 +448,10 @@ function resolveName(button, stateObj) {
  * Decide whether the secondary line is worth its space.
  * 'auto' -> only for domains whose state is a value, not a lamp switch.
  */
-function resolveShowState(button, stateObj) {
-  if (button.show_state === true) return true;
-  if (button.show_state === false) return false;
+function resolveShowState(button, stateObj, resolve = (value) => value) {
+  const configured = resolve(button.show_state);
+  if (configured === true || configured === 'true') return true;
+  if (configured === false || configured === 'false') return false;
   if (button.label) return true;
   if (!button.entity || !stateObj) return false;
   return VALUE_DOMAINS.has(domainOf(button.entity));
@@ -447,6 +487,91 @@ function applyStateTemplate(template, hass, stateObj, name) {
     const value = attributes[key];
     return value === undefined ? '' : String(value);
   });
+}
+
+/* --- templates ------------------------------------------------------------ */
+
+/**
+ * Fields can carry JavaScript, in the `[[[ ... ]]]` form that custom:button-card
+ * established. Reusing that syntax rather than inventing one means a template
+ * written for either card reads the same.
+ *
+ *   label: |
+ *     [[[ return entity.state === 'on' ? entity.attributes.count : ''; ]]]
+ *
+ * A template that fills the whole string returns its value as-is, so it can
+ * yield a boolean or a number. One embedded in surrounding text is substituted
+ * into it.
+ *
+ * This is evaluated code from the dashboard's own configuration - the same
+ * trade-off every templating card in this ecosystem makes.
+ */
+const TEMPLATE_PATTERN = /\[\[\[([\s\S]*?)\]\]\]/g;
+
+/** Compiled once per distinct template body; configs reuse the same strings. */
+const templateCache = new Map();
+
+function hasTemplate(value) {
+  return typeof value === 'string' && value.includes('[[[');
+}
+
+function compileTemplate(body) {
+  let fn = templateCache.get(body);
+  if (fn === undefined) {
+    try {
+      // eslint-disable-next-line no-new-func
+      fn = new Function('entity', 'states', 'user', 'hass', 'variables', body);
+    } catch (err) {
+      console.error(`${CARD_TAG}: template does not compile`, body, err);
+      fn = null;
+    }
+    templateCache.set(body, fn);
+  }
+  return fn;
+}
+
+/**
+ * Evaluate a value that may contain templates.
+ *
+ * A broken template yields undefined rather than taking the card down: one bad
+ * expression should cost its own field, not the dashboard.
+ */
+function renderTemplate(value, context) {
+  if (!hasTemplate(value)) return value;
+
+  // A single template filling the whole string returns its value as-is. The
+  // match is greedy, so "[[[a]]] / [[[b]]]" would otherwise look like one
+  // template whose body spans both - and that body is not valid JavaScript.
+  const whole = value.trim().match(/^\[\[\[([\s\S]*)\]\]\]$/);
+  if (whole && !whole[1].includes('[[[')) return runTemplate(whole[1], context);
+
+  // Embedded: substitute each occurrence into the surrounding text.
+  return value.replace(TEMPLATE_PATTERN, (_match, body) => {
+    const result = runTemplate(body, context);
+    return result === undefined || result === null ? '' : String(result);
+  });
+}
+
+function runTemplate(body, context) {
+  const fn = compileTemplate(body);
+  if (!fn) return undefined;
+  try {
+    return fn(context.entity, context.states, context.user, context.hass, context.variables);
+  } catch (err) {
+    console.error(`${CARD_TAG}: template failed`, body.trim(), err);
+    return undefined;
+  }
+}
+
+/** The values a template can read. */
+function templateContext(hass, stateObj, variables) {
+  return {
+    entity: stateObj,
+    states: hass.states,
+    user: hass.user,
+    hass,
+    variables: variables || {},
+  };
 }
 
 /* --- visibility conditions ------------------------------------------------ */
@@ -926,8 +1051,10 @@ const STYLES = `
      Colour lives on the icon and the hairline, which is where it informs. */
   --mbc-accent-soft: rgba(255, 255, 255, 0.14);
   --mbc-accent-soft: color-mix(in srgb, var(--primary-text-color, #fff) 14%, transparent);
-  --mbc-accent-line: rgba(255, 255, 255, 0.22);
-  --mbc-accent-line: color-mix(in srgb, var(--mbc-accent) 30%, transparent);
+  /* Note: the accent hairline is NOT derived here. A custom property is
+     substituted where it is declared, so mixing it on :host would freeze it to
+     the card's accent - a button setting its own --mbc-accent would colour its
+     icon but not its outline. The mix happens on .btn.active instead. */
 
   --mbc-text: var(--primary-text-color, #f5f5f7);
   --mbc-text-dim: var(--secondary-text-color, #a1a1a6);
@@ -1054,7 +1181,10 @@ const STYLES = `
 /* Active state: tinted surface, accent hairline, a whisper of glow. */
 .btn.active {
   background: var(--mbc-btn-active-bg, var(--mbc-accent-soft));
-  border-color: var(--mbc-accent-line);
+  /* Mixed here, so --mbc-accent resolves against this button - including one
+     set per button or produced by a template. */
+  border-color: rgba(255, 255, 255, 0.22);
+  border-color: color-mix(in srgb, var(--mbc-accent) 30%, transparent);
 }
 .btn.active .icon { color: var(--mbc-accent); }
 .btn.active .name { color: var(--mbc-text); }
@@ -1451,16 +1581,28 @@ class MultiButtonCard extends BaseElement {
     el.className = 'btn';
     el.type = 'button';
     el.dataset.index = String(index);
+    // Attributes that make a single button addressable from outside. card-mod
+    // injects its styles into this shadow root (it targets the card element,
+    // not an ha-card), so a selector like
+    //   .btn[data-entity="binary_sensor.alle_fenster"] { ... }
+    // reaches exactly one button. data-state and data-active are kept current
+    // by the sync, so a rule can depend on them.
+    if (button.entity) {
+      el.dataset.entity = button.entity;
+      el.dataset.domain = domainOf(button.entity);
+    }
+    if (button.name && typeof button.name === 'string' && !hasTemplate(button.name)) {
+      el.dataset.name = button.name;
+    }
     el.setAttribute('role', 'button');
 
     if (button.press_effect && button.press_effect !== 'none') {
       el.classList.add(`effect-${button.press_effect}`);
     }
     el.style.setProperty('--mbc-btn-radius', cssLength(button.radius, '18px'));
-    if (button.background) el.style.background = button.background;
-    if (button.active_background) el.style.setProperty('--mbc-btn-active-bg', button.active_background);
-    if (button.active_color) el.style.setProperty('--mbc-accent', button.active_color);
-    if (button.icon_color) el.style.setProperty('--mbc-icon-color', button.icon_color);
+    // Templated colours are applied per sync instead, since their value
+    // depends on state that only exists at that point.
+    if (!button.hasTemplates) this._applyColours(el, button);
     if (button.icon_size) el.style.setProperty('--mbc-icon-size', cssLength(button.icon_size, '30px'));
     if (button.label_size) el.style.setProperty('--mbc-label-size', cssLength(button.label_size, '14px'));
 
@@ -1480,6 +1622,41 @@ class MultiButtonCard extends BaseElement {
     this._bindGestures(el, index);
 
     return { root: el, icon, name, state, iconTag: 'ha-icon' };
+  }
+
+  /**
+   * A button's own CSS declarations. Not a full rule - there is no selector -
+   * just what would go inside one: "border: 2px solid red; opacity: 0.5".
+   *
+   * Properties set on a previous pass are removed first, otherwise a template
+   * that stops returning a border would leave the old one behind.
+   */
+  _applyStyle(el, css, cell) {
+    (cell.styleProps || []).forEach((property) => el.style.removeProperty(property));
+    cell.styleProps = [];
+    if (!css || typeof css !== 'string') return;
+
+    css.split(';').forEach((declaration) => {
+      const colon = declaration.indexOf(':');
+      if (colon < 0) return;
+      const property = declaration.slice(0, colon).trim();
+      const value = declaration.slice(colon + 1).trim();
+      if (!property || !value) return;
+      el.style.setProperty(property, value);
+      cell.styleProps.push(property);
+    });
+  }
+
+  /** Colour overrides, from config or from a template's result. */
+  _applyColours(el, colours) {
+    const set = (property, value) => {
+      if (value === undefined || value === null || value === '') el.style.removeProperty(property);
+      else el.style.setProperty(property, String(value));
+    };
+    set('background', colours.background);
+    set('--mbc-btn-active-bg', colours.active_background);
+    set('--mbc-accent', colours.active_color);
+    set('--mbc-icon-color', colours.icon_color);
   }
 
   /* --- Layout ----------------------------------------------------------- */
@@ -1600,21 +1777,49 @@ class MultiButtonCard extends BaseElement {
       const missing = !!button.entity && !stateObj;
       const unavailable = !!button.entity && isUnavailable(stateObj);
       const active = isActiveState(stateObj);
-      const icon = resolveIcon(button, stateObj);
-      const name = resolveName(button, stateObj);
+
+      // One context per templated button per update; buttons without
+      // templates never build one.
+      const context = button.hasTemplates
+        ? templateContext(this._hass, stateObj, this._config.variables)
+        : null;
+      const resolve = context ? (value) => renderTemplate(value, context) : (value) => value;
+
+      const icon = resolveIcon(button, stateObj, resolve);
+      const name = resolveName(button, stateObj, resolve);
+      const label = resolve(button.label);
+      const hasLabel = label !== undefined && label !== null && label !== '';
 
       let secondary = '';
-      if (resolveShowState(button, stateObj)) {
+      if (resolveShowState(button, stateObj, resolve)) {
         if (button.state_display) {
-          secondary = applyStateTemplate(button.state_display, this._hass, stateObj, name);
-        } else if (button.label) {
-          secondary = String(button.label);
+          const display = resolve(button.state_display);
+          // A template produced the whole text; otherwise the placeholder
+          // syntax still applies.
+          secondary = hasTemplate(button.state_display)
+            ? display === undefined || display === null
+              ? ''
+              : String(display)
+            : applyStateTemplate(display, this._hass, stateObj, name);
+        } else if (hasLabel) {
+          secondary = String(label);
         } else {
           secondary = formatState(this._hass, stateObj);
         }
-      } else if (button.label) {
-        secondary = String(button.label);
+      } else if (hasLabel) {
+        secondary = String(label);
       }
+
+      const colours = context
+        ? {
+            background: resolve(button.background),
+            active_background: resolve(button.active_background),
+            active_color: resolve(button.active_color),
+            icon_color: resolve(button.icon_color),
+          }
+        : null;
+      const showName = button.show_name === false ? false : resolve(button.show_name) !== false;
+      const style = button.style ? resolve(button.style) : null;
 
       const animate = animationActive(button.animation, stateObj);
       const signature = [
@@ -1625,7 +1830,12 @@ class MultiButtonCard extends BaseElement {
         unavailable ? 1 : 0,
         missing ? 1 : 0,
         animate ? button.animation.type : '',
-      ].join('');
+        showName ? 1 : 0,
+        style || '',
+        // Template results belong in the signature, so a card whose templates
+        // keep returning the same thing still writes nothing to the DOM.
+        colours ? JSON.stringify(colours) : '',
+      ].join('\u001f');
 
       if (!force && this._signatures[index] === signature) return;
       this._signatures[index] = signature;
@@ -1639,6 +1849,9 @@ class MultiButtonCard extends BaseElement {
         missing,
         animate,
         stateObj,
+        colours,
+        showName,
+        style,
       });
     });
 
@@ -1666,10 +1879,17 @@ class MultiButtonCard extends BaseElement {
     root.classList.toggle('unavailable', data.unavailable && !data.missing);
     root.classList.toggle('invalid', data.missing || !!button.error);
 
+    // Mirrored onto the element so a stylesheet can react to them.
+    root.dataset.state = data.stateObj ? String(data.stateObj.state) : '';
+    root.dataset.active = data.active ? 'true' : 'false';
+
     // Icon: explicit icon wins; otherwise let HA pick the domain icon.
     this._renderIcon(cell, button, data);
 
-    const showName = button.show_name !== false && !!data.name;
+    if (data.colours) this._applyColours(root, data.colours);
+    if (data.style || cell.styleProps) this._applyStyle(root, data.style, cell);
+
+    const showName = data.showName !== false && !!data.name;
     cell.name.textContent = showName ? data.name : '';
     cell.name.style.display = showName ? '' : 'none';
 
@@ -1967,6 +2187,8 @@ const LABELS = {
   max_button_size: 'Maximum button height',
   appearance: 'Card appearance',
   background: 'Background',
+  active_background: 'Background when active',
+  style: 'Extra CSS',
   radius: 'Corner radius',
   padding: 'Padding',
   shadow: 'Shadow',
@@ -1998,6 +2220,7 @@ const LABELS = {
 const ACTION_TYPES = ['more-info', 'toggle', 'perform-action', 'navigate', 'url', 'assist', 'none'];
 
 const CONDITIONS_TAG = 'ha-card-conditions-editor';
+const YAML_TAG = 'ha-yaml-editor';
 
 /**
  * Home Assistant defines its conditions editor lazily: it only reaches the
@@ -2009,6 +2232,30 @@ const CONDITIONS_TAG = 'ha-card-conditions-editor';
  * telling the user to write the conditions in YAML, which still works.
  */
 let conditionsEditorReady = null;
+let yamlEditorReady = null;
+
+/**
+ * `ha-yaml-editor` is what the `{}` button opens elsewhere in Lovelace. It is
+ * usually already defined by the time a card editor is open, but not
+ * guaranteed, so it is loaded the same way as the conditions editor.
+ */
+function ensureYamlEditor() {
+  if (customElements.get(YAML_TAG)) return Promise.resolve(true);
+  if (!yamlEditorReady) {
+    yamlEditorReady = (async () => {
+      try {
+        if (typeof window === 'undefined' || !window.loadCardHelpers) return false;
+        await window.loadCardHelpers();
+        await customElements.whenDefined(YAML_TAG);
+        return true;
+      } catch (err) {
+        console.warn(`${CARD_TAG}: could not load ${YAML_TAG}`, err);
+        return false;
+      }
+    })();
+  }
+  return yamlEditorReady;
+}
 
 function ensureConditionsEditor() {
   if (customElements.get(CONDITIONS_TAG)) return Promise.resolve(true);
@@ -2183,8 +2430,22 @@ const BUTTON_SCHEMA = [
       { name: 'label', selector: { text: {} } },
       { name: 'state_display', selector: { text: {} } },
       { name: 'icon_size', selector: { number: { min: 12, max: 96, mode: 'slider' } } },
-      { name: 'icon_color', selector: { text: {} } },
       { name: 'confirmation', selector: { boolean: {} } },
+    ],
+  },
+  {
+    type: 'expandable',
+    name: '',
+    title: 'Colours',
+    icon: 'mdi:palette-outline',
+    schema: [
+      // Per button, overriding the card-wide defaults. All of these accept a
+      // template, which the form passes through as text.
+      { name: 'active_color', selector: { text: {} } },
+      { name: 'icon_color', selector: { text: {} } },
+      { name: 'background', selector: { text: {} } },
+      { name: 'active_background', selector: { text: {} } },
+      { name: 'style', selector: { text: { multiline: true } } },
     ],
   },
   {
@@ -2253,6 +2514,9 @@ const BUTTON_FORM_KEYS = [
   'state_display',
   'icon_size',
   'icon_color',
+  'active_color',
+  'background',
+  'active_background',
   'show_name',
   'show_state',
   'confirmation',
@@ -2283,6 +2547,8 @@ class MultiButtonCardEditor extends BaseElement {
     this._hass = null;
     /** null = the card page, a number = that button's page. */
     this._openButton = null;
+    /** Whether the open button page shows YAML instead of the form. */
+    this._yamlMode = false;
     this._form = null;
     this._renderedPage = undefined;
   }
@@ -2316,7 +2582,7 @@ class MultiButtonCardEditor extends BaseElement {
     const page =
       this._openButton === null
         ? `card:${this._layoutMode()}`
-        : `button:${this._openButton}`;
+        : `button:${this._openButton}:${this._yamlMode ? 'yaml' : 'form'}`;
     if (page !== this._renderedPage) {
       this._renderedPage = page;
       this._buildPage();
@@ -2445,13 +2711,33 @@ class MultiButtonCardEditor extends BaseElement {
 
     const back = this._iconButton('mdi:arrow-left', 'Back', () => {
       this._openButton = null;
+      this._yamlMode = false;
       this._render();
     });
     const title = document.createElement('div');
     title.className = 'header-title';
-    title.textContent = button.name || button.entity || `Button ${index + 1}`;
-    header.append(back, title);
+    const label = typeof button.name === 'string' && !hasTemplate(button.name) ? button.name : null;
+    title.textContent = label || button.entity || `Button ${index + 1}`;
+
+    // Same affordance as everywhere else in Lovelace: {} swaps the form for
+    // the raw YAML of this one button.
+    const yamlToggle = this._iconButton(
+      this._yamlMode ? 'mdi:format-list-bulleted' : 'mdi:code-braces',
+      this._yamlMode ? 'Edit with the form' : 'Edit as YAML',
+      () => {
+        this._yamlMode = !this._yamlMode;
+        this._render();
+      },
+    );
+    yamlToggle.classList.add('yaml-toggle');
+
+    header.append(back, title, yamlToggle);
     root.appendChild(header);
+
+    if (this._yamlMode) {
+      this._buildButtonYaml(root, index, button);
+      return;
+    }
 
     this._form = this._createForm(BUTTON_SCHEMA, this._buttonFormData(button), (value) =>
       this._buttonFormChanged(value),
@@ -2470,6 +2756,45 @@ class MultiButtonCardEditor extends BaseElement {
     root.appendChild(slot);
 
     this._mountConditionsEditor(slot, index);
+  }
+
+  /**
+   * The whole button as YAML. Everything is editable here, including what the
+   * form cannot express - and it is the only place to reach a state-keyed icon
+   * map or a template without leaving the UI.
+   */
+  _buildButtonYaml(root, index, button) {
+    const slot = document.createElement('div');
+    slot.className = 'yaml';
+    const note = document.createElement('div');
+    note.className = 'note';
+    note.textContent = 'Loading the YAML editor…';
+    slot.appendChild(note);
+    root.appendChild(slot);
+
+    ensureYamlEditor().then((available) => {
+      if (!slot.isConnected || this._openButton !== index || !this._yamlMode) return;
+      if (!available) {
+        note.textContent =
+          'The YAML editor could not be loaded. Use the card\'s own YAML editor instead.';
+        return;
+      }
+
+      const editor = document.createElement(YAML_TAG);
+      editor.hass = this._hass;
+      editor.defaultValue = button;
+      editor.addEventListener('value-changed', (event) => {
+        event.stopPropagation();
+        const { value, isValid } = event.detail || {};
+        // Invalid YAML is reported by the editor itself; writing it back
+        // would replace the button with nonsense mid-typing.
+        if (isValid === false || !value || typeof value !== 'object') return;
+        const buttons = [...this._config.buttons];
+        buttons[index] = value;
+        this._commit({ ...this._config, buttons });
+      });
+      slot.replaceChildren(editor);
+    });
   }
 
   /** The fallback, and what is shown while the real editor loads. */
@@ -2596,6 +2921,10 @@ class MultiButtonCardEditor extends BaseElement {
       state_display: button.state_display ?? '',
       icon_size: toNumber(button.icon_size ?? (this._config.button || {}).icon_size, undefined),
       icon_color: button.icon_color ?? '',
+      active_color: button.active_color ?? '',
+      background: button.background ?? '',
+      active_background: button.active_background ?? '',
+      style: button.style ?? '',
       show_name: button.show_name ?? true,
       show_state: showStateToForm(button.show_state),
       confirmation: button.confirmation === true || (button.confirmation && typeof button.confirmation === 'object'),
@@ -2620,6 +2949,10 @@ class MultiButtonCardEditor extends BaseElement {
         state_display: value.state_display,
         icon_size: value.icon_size,
         icon_color: value.icon_color,
+        active_color: value.active_color,
+        background: value.background,
+        active_background: value.active_background,
+        style: value.style,
         show_name: value.show_name,
         show_state: showStateFromForm(value.show_state),
         confirmation: value.confirmation,
@@ -2635,6 +2968,7 @@ class MultiButtonCardEditor extends BaseElement {
         confirmation: false,
         icon_size: toNumber((this._config.button || {}).icon_size, undefined),
         icon_color: (this._config.button || {}).icon_color,
+        active_color: (this._config.button || {}).active_color,
         // Inherited from the card, so only a genuine deviation is written out.
         animation: { ...DEFAULT_ANIMATION, ...(this._config.animation || {}) },
       },
@@ -2824,6 +3158,11 @@ ha-form { display: block; }
   color: var(--primary-text-color);
 }
 
+.header .yaml-toggle { margin-left: auto; }
+
+.yaml { margin-top: 4px; }
+.yaml ha-yaml-editor { display: block; }
+
 .header-title {
   font-size: 16px;
   font-weight: 500;
@@ -2894,4 +3233,4 @@ if (inBrowser) {
   );
 }
 
-export { CARD_VERSION, CARD_TAG, REPO_URL, MultiButtonCard, mergeOwnedKeys, CARD_FORM_KEYS, BUTTON_FORM_KEYS, isVisible, conditionMet, collectMediaQueries, MultiButtonCardEditor, pruneDefaults, computeGridOptions, computeContentHeight, partitionRows, computeColumns, computeCellHeight, normalizeConfig, animationActive };
+export { CARD_VERSION, CARD_TAG, REPO_URL, MultiButtonCard, renderTemplate, hasTemplate, templateContext, mergeOwnedKeys, CARD_FORM_KEYS, BUTTON_FORM_KEYS, isVisible, conditionMet, collectMediaQueries, MultiButtonCardEditor, pruneDefaults, computeGridOptions, computeContentHeight, partitionRows, computeColumns, computeCellHeight, normalizeConfig, animationActive };

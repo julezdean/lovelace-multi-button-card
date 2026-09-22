@@ -28,6 +28,8 @@ orphan rows and no layout jumps.
   - [`appearance`](#appearance)
   - [`button` (defaults for all buttons)](#button-defaults-for-all-buttons)
   - [Per-button options](#per-button-options)
+  - [Templates](#templates)
+  - [Per-button styling](#per-button-styling)
   - [Visibility](#visibility)
   - [Actions](#actions)
   - [Icons](#icons)
@@ -63,7 +65,7 @@ Adding it by hand instead:
    - Type: **JavaScript module**
 3. Reload the browser
 
-Confirm it loaded: the browser console prints `multi-button-card v1.4.1` on
+Confirm it loaded: the browser console prints `multi-button-card v1.5.0` on
 startup.
 
 ---
@@ -265,6 +267,9 @@ switch the colour already says everything, so the extra line is left out. Set
 | `size` | `large` \| `wide` \| `full` | Aliases for `colspan` |
 | `confirmation` | boolean \| `{ text }` | Two-step confirmation, see below |
 | `visibility` | list | Conditions under which the button is shown, see [Visibility](#visibility) |
+| `style` | string | CSS declarations for this button, see [Per-button styling](#per-button-styling) |
+| `active_color` | CSS colour | Accent for this button's icon and outline when active |
+| `icon_color`, `background`, `active_background` | CSS colour | Per-button overrides of the card defaults |
 | `state_display` | string | Template for the state line, see below |
 | `tap_action` / `hold_action` / `double_tap_action` | map | See [Actions](#actions) |
 | `animation` | map \| string | See [Animations](#animations) |
@@ -283,6 +288,94 @@ state_display: "{{state}} · {{attributes.current_temperature}} °C"
 
 Available: `{{state}}` (formatted), `{{raw_state}}`, `{{name}}`, and any
 attribute by name or as `{{attributes.x}}`.
+
+### Templates
+
+Presentation fields can carry JavaScript, in the `[[[ ... ]]]` form that
+`custom:button-card` established:
+
+```yaml
+buttons:
+  - entity: binary_sensor.alle_fenster
+    name: Fenster
+    label: |
+      [[[
+        const offen = entity.attributes.anzahl_offen ?? 0;
+        return entity.state === 'on' ? `${offen}` : '';
+      ]]]
+```
+
+Available inside a template: `entity` (this button's state object, or
+`undefined`), `states`, `user`, `hass`, and `variables` (from a `variables:`
+block on the card).
+
+A template filling the whole string returns its value as-is, so it can yield a
+number or a boolean. One embedded in text is substituted into it:
+`label: "Status: [[[ return entity.state ]]] now"`.
+
+Templated fields: `name`, `label`, `state_display`, `icon`, `style`,
+`color`, `active_color`, `icon_color`, `background`, `active_background`,
+`show_name`, `show_state`. Deliberately **not** templated: `entity` (it is what
+state tracking hangs on), `colspan` (it would rebuild the layout on every
+update) and the actions (structure, not appearance).
+
+A template that throws costs its own field and nothing else — the button keeps
+rendering, and the error goes to the browser console.
+
+Templates are evaluated JavaScript from the dashboard's configuration, the same
+trade-off every templating card in this ecosystem makes. Your own config is
+yours; be as careful with a copied one as you would be with any code.
+
+### Per-button styling
+
+Each button takes a `style` of CSS declarations — not a rule, just what would
+go inside one — and it is templated like everything else:
+
+```yaml
+- entity: binary_sensor.alle_fenster
+  style: |
+    [[[
+      return entity.attributes.anzahl_nicht_verfuegbar > 0
+        ? 'border: 2px solid var(--error-color)'
+        : '';
+    ]]]
+```
+
+Colours are per button too — `active_color` is the accent its icon and outline
+take when active, and like everything else it can be a template:
+
+```yaml
+- entity: sensor.wohnzimmer_temperatur
+  active_color: |
+    [[[ return Number(entity.state) > 20 ? '#ff9f43' : '#54a0ff' ]]]
+```
+
+In the editor these live under **Colours** on the button's page.
+
+**card_mod** works too, and does not need anything per button. It targets the
+card element and injects into this card's shadow root, so a selector reaches a
+single button directly. Every button carries the attributes to find it by:
+
+| Attribute | |
+|---|---|
+| `data-entity` | the button's entity |
+| `data-domain` | that entity's domain |
+| `data-state` | its current state, kept up to date |
+| `data-active` | `true` / `false`, HA's active semantics |
+| `data-index` | position in the config |
+| `data-name` | the configured name, when it is not a template |
+
+```yaml
+card_mod:
+  style: |
+    .btn[data-entity="binary_sensor.alle_fenster"][data-state="on"] {
+      border: 2px solid var(--error-color) !important;
+    }
+```
+
+There is no `card_mod` *per button*: card-mod knows cards, not the elements
+inside them. The selector above is the equivalent, and `style` is the option
+that needs no extra integration at all.
 
 ### Visibility
 
@@ -328,6 +421,12 @@ Two details worth knowing:
 tablet re-evaluates them; nothing needs to be reloaded.
 
 ![Visibility conditions](docs/images/visibility.png)
+
+Each button's page also has a `{}` button that swaps the form for the raw YAML
+of that one button — the same affordance as elsewhere in Lovelace. It is the
+way to reach what a form cannot express: templates, state-keyed icon maps, and
+anything a later version adds. Invalid YAML is not written back, so the card
+does not fall apart while you type.
 
 In the visual editor, conditions are edited on a button's page under
 **Visibility**, using Home Assistant's own conditions editor — the same control

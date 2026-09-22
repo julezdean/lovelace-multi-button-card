@@ -51,6 +51,7 @@
   .form label { display: flex; justify-content: space-between; gap: 8px; padding: 2px 0; }
   .form fieldset { border: 1px solid #2c2d31; border-radius: 6px; margin: 6px 0; padding: 6px 8px; }
   .form fieldset::before { content: attr(data-section); font-size: 11px; color: #8e8e93; }
+  .yaml-area { width: 100%; background: #141518; color: #a8d8a8; border: 1px solid #26272b; border-radius: 6px; font-family: ui-monospace, monospace; font-size: 11px; padding: 8px; }
   .cond-list { font-size: 12px; }
   .cond { display: flex; justify-content: space-between; gap: 8px; padding: 4px 6px; border: 1px solid #2c2d31; border-radius: 6px; margin-bottom: 4px; }
   .cond-add { background: none; border: 1px dashed #2c2d31; color: #4a9eff; border-radius: 6px; padding: 6px; width: 100%; font-size: 12px; }
@@ -77,6 +78,18 @@
 <!-- Scene: portrait tablet column -->
 <div class="scene" id="scene-portrait">
   <div class="frame" style="width: 360px"><div id="portrait-host"></div></div>
+</div>
+
+<!-- Scene: per-button accent colour -->
+<div class="scene" id="scene-accent">
+  <div class="frame" style="width: 560px"><div id="accent-host"></div></div>
+  <pre id="accent-out"></pre>
+</div>
+
+<!-- Scene: templated fields -->
+<div class="scene" id="scene-templates">
+  <div class="frame" style="width: 560px"><div id="tpl-host"></div></div>
+  <pre id="tpl-out"></pre>
 </div>
 
 <!-- Scene: visibility conditions reshaping the layout -->
@@ -352,6 +365,32 @@ window.loadCardHelpers = async () => ({
   createCardElement: async () => ({ constructor: { getConfigElement: async () => ({}) } }),
 });
 
+/**
+ * Stand-in for ha-yaml-editor: a textarea that emits value-changed with the
+ * parsed object. HA parses YAML; here JSON is enough to exercise the contract.
+ */
+class HaYamlEditorStub extends HTMLElement {
+  set hass(v) { this._hass = v; }
+  set defaultValue(v) {
+    this._value = v;
+    this.innerHTML = '';
+    const ta = document.createElement('textarea');
+    ta.className = 'yaml-area';
+    ta.rows = 8;
+    ta.value = JSON.stringify(v, null, 2);
+    ta.addEventListener('input', () => {
+      let parsed = null;
+      let isValid = true;
+      try { parsed = JSON.parse(ta.value); } catch (e) { isValid = false; }
+      this.dispatchEvent(new CustomEvent('value-changed', {
+        detail: { value: parsed, isValid }, bubbles: true, composed: true,
+      }));
+    });
+    this.appendChild(ta);
+  }
+}
+customElements.define('ha-yaml-editor', HaYamlEditorStub);
+
 /** ha-icon-button is only a clickable wrapper as far as the editor cares. */
 class HaIconButtonStub extends HTMLElement {}
 customElements.define('ha-icon-button', HaIconButtonStub);
@@ -376,6 +415,7 @@ const hass = {
     entity('sensor.aussen_temperatur', '7.8', { friendly_name: 'Außen', unit_of_measurement: '°C' }),
     entity('sensor.luftfeuchte', '46', { friendly_name: 'Luftfeuchte', unit_of_measurement: '%' }),
     entity('binary_sensor.waschmaschine', 'on', { friendly_name: 'Waschmaschine' }),
+    entity('binary_sensor.fenster', 'on', { friendly_name: 'Fenster', anzahl_offen: 3, anzahl_nicht_verfuegbar: 1 }),
     entity('cover.rolladen_wohnzimmer', 'open', { friendly_name: 'Rolladen', current_position: 80 }),
     entity('lock.haustuer', 'locked', { friendly_name: 'Haustür' }),
     entity('media_player.wohnzimmer', 'playing', { friendly_name: 'Sonos' }),
@@ -465,6 +505,109 @@ const SCENES = {
         { name: 'Außen', icon: 'mdi:thermometer', entity: 'sensor.aussen_temperatur', show_state: true },
       ],
     }, document.getElementById('portrait-host'));
+  },
+
+  accent() {
+    const el = card({
+      buttons: [
+        { name: 'Standard', entity: 'light.wohnzimmer', icon: 'mdi:sofa' },
+        { name: 'Grün', entity: 'light.bad', icon: 'mdi:shower', active_color: '#5ac26b' },
+        { name: 'Pink', entity: 'light.buero', icon: 'mdi:desk-lamp', active_color: '#ff6b9d' },
+        { name: 'Nach Temperatur', entity: 'sensor.wohnzimmer_temperatur', icon: 'mdi:thermometer',
+          active_color: '[[[ return Number(entity.state) > 20 ? "#ff9f43" : "#54a0ff" ]]]' },
+        { name: 'Aus (kein Akzent)', entity: 'light.kueche', icon: 'mdi:countertop',
+          active_color: '#5ac26b' },
+      ],
+    }, document.getElementById('accent-host'));
+
+    requestAnimationFrame(() => {
+      const rows = [...el.shadowRoot.querySelectorAll('.btn')].map((b) => {
+        const cs = getComputedStyle(b);
+        return `${b.querySelector('.name').textContent.padEnd(20)} ` +
+          `--mbc-accent=${(b.style.getPropertyValue('--mbc-accent') || '(inherited)').padEnd(12)} ` +
+          `active=${b.classList.contains('active')}  ` +
+          `icon=${getComputedStyle(b.querySelector('.icon')).color}  ` +
+          `border=${cs.borderTopColor}  bg=${cs.backgroundColor}`;
+      });
+      document.getElementById('accent-out').textContent = rows.join('\n');
+    });
+  },
+
+  templates() {
+    const el = card({
+      buttons: [
+        {
+          // The user's own example.
+          name: 'Fenster',
+          entity: 'binary_sensor.fenster',
+          icon: 'mdi:window-open',
+          show_state: true,
+          label: `[[[
+            const offline = entity.attributes.anzahl_nicht_verfuegbar ?? 0;
+            const offen = entity.attributes.anzahl_offen ?? 0;
+            const basis = entity.state === 'on' ? \`\${offen}\` : '';
+            return basis;
+          ]]]`,
+        },
+        {
+          name: '[[[ return "Temp " + states["sensor.wohnzimmer_temperatur"].state + "°" ]]]',
+          entity: 'sensor.wohnzimmer_temperatur',
+          icon: '[[[ return Number(entity.state) > 20 ? "mdi:fire" : "mdi:snowflake" ]]]',
+          icon_color: '[[[ return Number(entity.state) > 20 ? "#ff9f43" : "#54a0ff" ]]]',
+        },
+        {
+          name: 'Eingebettet',
+          entity: 'light.wohnzimmer',
+          label: 'Status: [[[ return entity.state ]]] jetzt',
+          show_state: true,
+        },
+        {
+          // The card_mod case, done with the card's own style field.
+          name: 'Fenster (style)',
+          entity: 'binary_sensor.fenster',
+          icon: 'mdi:window-closed',
+          style: `[[[
+            return entity.attributes.anzahl_nicht_verfuegbar > 0
+              ? 'border: 2px solid #ff5f56'
+              : '';
+          ]]]`,
+        },
+        {
+          name: 'Kaputtes Template',
+          entity: 'light.kueche',
+          label: '[[[ return entity.gibt.es.nicht ]]]',
+          show_state: true,
+        },
+      ],
+    }, document.getElementById('tpl-host'));
+
+    requestAnimationFrame(() => {
+      const out = [...el.shadowRoot.querySelectorAll('.btn')].map((b) => ({
+        name: b.querySelector('.name').textContent,
+        state: b.querySelector('.state').textContent,
+        icon: b.querySelector('.icon')?.getAttribute('icon') || b.querySelector('.icon')?.icon,
+        iconColor: b.style.getPropertyValue('--mbc-icon-color') || '(none)',
+        border: b.style.border || '(none)',
+        attrs: `entity=${b.dataset.entity || '-'} state=${b.dataset.state || '-'}`,
+      }));
+      // What card-mod does: put a <style> into the card's shadow root. The
+      // selector has to be able to single out one button.
+      const injected = document.createElement('style');
+      injected.textContent =
+        '.btn[data-entity="binary_sensor.fenster"][data-state="on"] { outline: 2px dashed #5ac26b; }';
+      el.shadowRoot.appendChild(injected);
+
+      const targeted = [...el.shadowRoot.querySelectorAll('.btn')].filter(
+        (b) => getComputedStyle(b).outlineStyle === 'dashed',
+      ).length;
+      out.push({ name: `-- card_mod selector matched ${targeted} button(s) --`, state: '', icon: '', iconColor: '' });
+
+      document.getElementById('tpl-out').textContent = out
+        .map((o) => o.state === '' && o.icon === ''
+          ? `\n${o.name}`
+          : `${o.name}\n    label="${o.state}"  icon=${o.icon}  colour=${o.iconColor}\n    border=${o.border}  ${o.attrs}`)
+        .join('\n');
+    });
   },
 
   visibility() {
@@ -666,7 +809,35 @@ const SCENES = {
     });
     sub.hass = hass;
     subHost.appendChild(sub);
-    requestAnimationFrame(() => sub.shadowRoot.querySelector('.row-label').click());
+    requestAnimationFrame(() => {
+      sub.shadowRoot.querySelector('.row-label').click();
+      // Flip it into YAML mode, the way the {} button does.
+      sub.shadowRoot.querySelector('.yaml-toggle').click();
+
+      // And check the write-back: edit the YAML, see it reach the config.
+      setTimeout(() => {
+        const area = sub.shadowRoot.querySelector('.yaml-area');
+        const results = [];
+        if (!area) {
+          results.push('yaml editor: NOT mounted');
+        } else {
+          let last = null;
+          sub.addEventListener('config-changed', (e) => { last = e.detail.config.buttons[0]; });
+
+          area.value = JSON.stringify({ name: 'Aus YAML', entity: 'light.bad', icon: 'mdi:shower' });
+          area.dispatchEvent(new Event('input', { bubbles: true }));
+          results.push('after valid edit:   ' + JSON.stringify(last));
+
+          const before = JSON.stringify(last);
+          area.value = '{ this is not valid';
+          area.dispatchEvent(new Event('input', { bubbles: true }));
+          results.push('after invalid edit: ' + (JSON.stringify(last) === before
+            ? 'unchanged (correct)' : 'CHANGED - bug'));
+        }
+        const out = document.getElementById('editor-out');
+        out.textContent = 'YAML mode\n' + results.join('\n') + '\n\n' + out.textContent;
+      }, 80);
+    });
   },
 
   constrained() {

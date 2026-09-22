@@ -6,6 +6,42 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-09-22
+
+### Added
+
+- Presentation fields take JavaScript templates in the `[[[ ... ]]]` form that
+  `custom:button-card` established - reusing that syntax rather than inventing
+  one means a template written for either card reads the same. Covers `name`,
+  `label`, `state_display`, `icon`, `style`, the colour options and
+  `show_name` / `show_state`. `entity`, `colspan` and the actions are
+  deliberately excluded: the first is what state tracking hangs on, the second
+  would rebuild the layout on every update, the third is structure rather than
+  appearance.
+- A template that throws costs its own field and nothing else; the error goes
+  to the console and the button keeps rendering.
+- A per-button `style` of CSS declarations, templated like the rest.
+- Every button carries `data-entity`, `data-domain`, `data-state`,
+  `data-active`, `data-index` and `data-name`, so a single button can be
+  addressed from a stylesheet. card-mod injects into this card's shadow root -
+  it targets the card element, not an `ha-card` - so those selectors work
+  without any per-button support in card-mod itself.
+- A `{}` button on each button's page swaps the form for that button's raw
+  YAML, the same affordance as elsewhere in Lovelace. Invalid YAML is not
+  written back.
+- The accent colour, the icon colour, both backgrounds and the extra CSS are
+  editable per button, in a Colours section on the button's page. The options
+  already worked in YAML; the form only offered them card-wide, which is where
+  people looked for them.
+
+### Fixed
+
+- A button's own accent colour reached its icon but not its outline. The
+  hairline was mixed from `--mbc-accent` on the host, and a custom property is
+  substituted where it is declared - so the mix froze to the card's accent
+  before any button could override it. It is mixed on the button now, which is
+  also what makes a templated accent colour work.
+
 ## [1.4.1] - 2026-09-22
 
 ### Fixed
