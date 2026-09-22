@@ -65,7 +65,7 @@ Adding it by hand instead:
    - Type: **JavaScript module**
 3. Reload the browser
 
-Confirm it loaded: the browser console prints `multi-button-card v1.7.1` on
+Confirm it loaded: the browser console prints `multi-button-card v1.7.2` on
 startup.
 
 ---

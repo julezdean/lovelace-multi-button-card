@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [1.7.2] - 2026-09-22
+
 ### Fixed
 
 - A `todo` button was always drawn as active. Whether a numeric state counts
