@@ -6,6 +6,23 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [1.5.1] - 2026-09-22
+
+### Fixed
+
+- A button with both `background` and `active_background` kept its resting
+  colour while switched on. The configured background was written as an inline
+  style while the active colour came from the `.btn.active` rule, and inline
+  beats every rule - so `active_background` could never take effect. The
+  configured value is a custom property now and the cascade does the ordering.
+- A button given only a `background` no longer swaps it for the generic active
+  tint when it switches on. The configured value is held in a property of its
+  own, so the active rule can tell a configured colour from a default one; a
+  button with its own colour keeps it and carries the active state on its icon
+  and hairline instead.
+- Hover replaced a configured background instead of tinting it. It is an
+  overlay now, so it works over any colour.
+
 ## [1.5.0] - 2026-09-22
 
 ### Added

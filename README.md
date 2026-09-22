@@ -65,7 +65,7 @@ Adding it by hand instead:
    - Type: **JavaScript module**
 3. Reload the browser
 
-Confirm it loaded: the browser console prints `multi-button-card v1.5.0` on
+Confirm it loaded: the browser console prints `multi-button-card v1.5.1` on
 startup.
 
 ---
@@ -270,6 +270,10 @@ switch the colour already says everything, so the extra line is left out. Set
 | `style` | string | CSS declarations for this button, see [Per-button styling](#per-button-styling) |
 | `active_color` | CSS colour | Accent for this button's icon and outline when active |
 | `icon_color`, `background`, `active_background` | CSS colour | Per-button overrides of the card defaults |
+
+`active_background` takes precedence over `background` while the button is on.
+A button given only a `background` keeps that colour in both states — the
+active state then shows on its icon and outline rather than on the surface.
 | `state_display` | string | Template for the state line, see below |
 | `tap_action` / `hold_action` / `double_tap_action` | map | See [Actions](#actions) |
 | `animation` | map \| string | See [Animations](#animations) |

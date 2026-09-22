@@ -16,7 +16,7 @@
  *   9. Registration
  */
 
-const CARD_VERSION = '1.5.0';
+const CARD_VERSION = '1.5.1';
 
 /**
  * The repository is prefixed, the card tag is not: the prefix groups the repo
@@ -1145,7 +1145,10 @@ const STYLES = `
   box-sizing: border-box;
   border: 1px solid var(--mbc-btn-border);
   border-radius: var(--mbc-btn-radius);
-  background: var(--mbc-btn-bg);
+  /* --mbc-btn-custom-bg is set only when the config gives this button a
+     colour of its own, so the active rule below can tell "configured" from
+     "left at the default" and fall back accordingly. */
+  background: var(--mbc-btn-custom-bg, var(--mbc-btn-bg));
   color: var(--mbc-text);
 
   font-family: inherit;
@@ -1168,9 +1171,18 @@ const STYLES = `
   outline-offset: 2px;
 }
 
-/* Pointer devices only - the wall tablet must not depend on hover. */
+/* Pointer devices only - the wall tablet must not depend on hover.
+   An overlay rather than another background: a button with a configured
+   colour would otherwise lose it on hover. */
 @media (hover: hover) {
-  .btn:hover { background: var(--mbc-btn-bg-hover); }
+  .btn:hover::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: rgba(255, 255, 255, 0.045);
+    pointer-events: none;
+  }
 }
 
 /* Press feedback: fast in, slightly slower out. */
@@ -1180,7 +1192,10 @@ const STYLES = `
 
 /* Active state: tinted surface, accent hairline, a whisper of glow. */
 .btn.active {
-  background: var(--mbc-btn-active-bg, var(--mbc-accent-soft));
+  /* A button with its own colour keeps it while active - the active state is
+     carried by the icon and the hairline. It only turns into the generic
+     active tint when no colour was configured at all. */
+  background: var(--mbc-btn-active-bg, var(--mbc-btn-custom-bg, var(--mbc-accent-soft)));
   /* Mixed here, so --mbc-accent resolves against this button - including one
      set per button or produced by a template. */
   border-color: rgba(255, 255, 255, 0.22);
@@ -1653,7 +1668,12 @@ class MultiButtonCard extends BaseElement {
       if (value === undefined || value === null || value === '') el.style.removeProperty(property);
       else el.style.setProperty(property, String(value));
     };
-    set('background', colours.background);
+    // Written as the custom property the base rule reads, not as an inline
+    // background. Inline wins over every rule, so setting it directly made a
+    // configured background beat .btn.active - the button kept its resting
+    // colour while switched on. As a property, the cascade decides, and the
+    // more specific .btn.active rule takes precedence as it should.
+    set('--mbc-btn-custom-bg', colours.background);
     set('--mbc-btn-active-bg', colours.active_background);
     set('--mbc-accent', colours.active_color);
     set('--mbc-icon-color', colours.icon_color);
