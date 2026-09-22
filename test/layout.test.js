@@ -203,6 +203,13 @@ test('the default condition is HA active semantics', () => {
   assert.equal(animationActive(anim({ when: 'active' }), off), false);
 });
 
+test('a value domain at zero is inactive', () => {
+  const empty = { entity_id: 'todo.shopping', state: '0', attributes: {} };
+  const filled = { entity_id: 'todo.shopping', state: '3', attributes: {} };
+  assert.equal(animationActive(anim({ when: 'active' }), empty), false);
+  assert.equal(animationActive(anim({ when: 'active' }), filled), true);
+});
+
 test('a bare state string matches exactly', () => {
   assert.equal(animationActive(anim({ when: 'on' }), on), true);
   assert.equal(animationActive(anim({ when: 'on' }), off), false);

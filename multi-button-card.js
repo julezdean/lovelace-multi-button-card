@@ -56,6 +56,10 @@ const UNAVAILABLE_STATES = new Set(['unavailable', 'unknown']);
  * Domains whose state carries a *value* worth reading from across the room.
  * For pure on/off domains the colour already tells the story, so the extra
  * text line is noise - see resolveShowState().
+ *
+ * The list does double duty: it is also how isActiveState() knows that a
+ * numeric state of zero means "nothing going on". A domain missing here whose
+ * state is a count therefore reads as permanently active.
  */
 const VALUE_DOMAINS = new Set([
   'sensor',
@@ -74,6 +78,7 @@ const VALUE_DOMAINS = new Set([
   'lock',
   'alarm_control_panel',
   'counter',
+  'todo',
   'input_select',
   'select',
   'update',

@@ -6,6 +6,15 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- A `todo` button was always drawn as active. Whether a numeric state counts
+  as "doing something" is decided from a list of domains, and `todo` was not
+  on it - so an empty shopping list, state `0`, fell through to active. The
+  button now lights up exactly while items are on the list. Same list, same
+  effect for the second line: a `todo` button without a label now shows its
+  state there, the way a counter does.
+
 ## [1.7.1] - 2026-09-22
 
 ### Fixed
