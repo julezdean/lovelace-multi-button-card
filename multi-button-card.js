@@ -16,7 +16,7 @@
  *   9. Registration
  */
 
-const CARD_VERSION = '1.7.2';
+const CARD_VERSION = '1.8.0';
 
 /**
  * The repository is prefixed, the card tag is not: the prefix groups the repo

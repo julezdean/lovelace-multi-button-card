@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [1.8.0] - 2026-09-29
+
 ### Added
 
 - Confirmation for every gesture, not just the tap. `tap_action`,
