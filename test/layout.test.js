@@ -6,6 +6,8 @@ import {
   computeCellHeight,
   normalizeConfig,
   animationActive,
+  isActiveState,
+  isUnavailable,
   computeGridOptions,
   computeContentHeight,
 } from '../multi-button-card.js';
@@ -208,6 +210,30 @@ test('a value domain at zero is inactive', () => {
   const filled = { entity_id: 'todo.shopping', state: '3', attributes: {} };
   assert.equal(animationActive(anim({ when: 'active' }), empty), false);
   assert.equal(animationActive(anim({ when: 'active' }), filled), true);
+});
+
+test('a button, scene or event is not active just because it was pressed once', () => {
+  // Their state is the timestamp of the last press; read as a state it would
+  // be active forever. The brief flash after a press is the card's business.
+  for (const entity_id of ['button.klingel', 'input_button.a', 'scene.abend', 'event.tuer']) {
+    const pressed = { entity_id, state: '2026-09-29T09:14:02.123+00:00', attributes: {} };
+    assert.equal(isActiveState(pressed), false, entity_id);
+    assert.equal(isUnavailable(pressed), false, entity_id);
+  }
+});
+
+test('a button that was never pressed is usable, not unavailable', () => {
+  const fresh = { entity_id: 'button.klingel', state: 'unknown', attributes: {} };
+  assert.equal(isUnavailable(fresh), false);
+  assert.equal(isUnavailable({ ...fresh, state: 'unavailable' }), true);
+  // Everywhere else unknown still means unavailable.
+  assert.equal(isUnavailable({ entity_id: 'light.a', state: 'unknown', attributes: {} }), true);
+});
+
+test('an animation on active follows the activity the card passes in', () => {
+  const pressed = { entity_id: 'button.klingel', state: '2026-09-29T09:14:02+00:00', attributes: {} };
+  assert.equal(animationActive(anim({ when: 'active' }), pressed), false);
+  assert.equal(animationActive(anim({ when: 'active' }), pressed, true), true, 'during the flash');
 });
 
 test('a bare state string matches exactly', () => {

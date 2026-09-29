@@ -16,6 +16,19 @@ All notable changes to this project are documented here. The format follows
 - The visual editor has a confirmation switch below each action instead of a
   single one under Display.
 
+### Fixed
+
+- `button`, `input_button`, `scene` and `event` entities were always drawn as
+  active. Their state is the timestamp of the last press, which the card read
+  as "doing something" from the first press on. They are now inactive and
+  light up for one second when the timestamp changes - so a press shows,
+  also one made from another device. The flash is timed on the tablet's own
+  clock from when the change arrives, since a drifting wall-tablet clock
+  would otherwise eat it. Returning from `unavailable` after a restart does
+  not count as a press.
+- A button that had never been pressed, state `unknown`, was drawn dimmed as
+  unavailable although it works.
+
 ### Changed
 
 - The button-level `confirmation` is now the older spelling of

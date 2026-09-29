@@ -644,6 +644,14 @@ responsiveness on a wall tablet matters more than universal double-tap support.
 Hold fires at 500 ms. Dragging more than 12 px cancels the gesture, so scrolling
 a dashboard does not trigger buttons.
 
+**Buttons, scenes and events.** `button`, `input_button`, `scene` and `event`
+entities have no on or off — their state is the time of the last press. Read as
+a state, that would be active forever after the first press, so these buttons
+stay inactive and light up for one second whenever the timestamp changes,
+whether the press came from this card or from anywhere else. An animation on
+`when: active` plays during that second. A button that was never pressed has
+the state `unknown`; it is shown as a normal button, not as unavailable.
+
 **Performance.** The DOM is built once. A `hass` update compares one signature
 string per button and touches the DOM only for buttons that actually changed.
 The `ResizeObserver` reads width only — reading height would feed the layout

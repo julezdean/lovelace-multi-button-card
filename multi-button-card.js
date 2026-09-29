@@ -53,6 +53,15 @@ const INACTIVE_STATES = new Set([
 const UNAVAILABLE_STATES = new Set(['unavailable', 'unknown']);
 
 /**
+ * Domains that have no on/off, only moments: their state is the timestamp of
+ * the last press, activation or event. Read as a state, that timestamp is
+ * "active" forever after the first press. So they count as inactive, and the
+ * card lights them up briefly when the timestamp changes instead - see
+ * PRESS_FLASH_MS. `unknown` just means "never pressed yet" here.
+ */
+const STATELESS_DOMAINS = new Set(['button', 'input_button', 'scene', 'event']);
+
+/**
  * Domains whose state carries a *value* worth reading from across the room.
  * For pure on/off domains the colour already tells the story, so the extra
  * text line is noise - see resolveShowState().
@@ -117,6 +126,8 @@ const VALID_ANIMATIONS = new Set([
 const HOLD_DELAY_MS = 500;
 const DOUBLE_TAP_WINDOW_MS = 250;
 const CONFIRM_TIMEOUT_MS = 4000;
+/** How long a stateless entity reads as active after it was triggered. */
+const PRESS_FLASH_MS = 1000;
 
 /** Built-in confirmation prompts, per gesture: repeat what armed it. */
 const CONFIRM_TEXT = {
@@ -447,8 +458,14 @@ function domainOf(entityId) {
   return typeof entityId === 'string' ? entityId.split('.')[0] : '';
 }
 
+function isStateless(stateObj) {
+  return !!stateObj && STATELESS_DOMAINS.has(domainOf(stateObj.entity_id));
+}
+
 function isUnavailable(stateObj) {
-  return !stateObj || UNAVAILABLE_STATES.has(stateObj.state);
+  if (!stateObj) return true;
+  if (isStateless(stateObj)) return stateObj.state === 'unavailable';
+  return UNAVAILABLE_STATES.has(stateObj.state);
 }
 
 /** HA's notion of "this thing is doing something right now". */
@@ -457,6 +474,8 @@ function isActiveState(stateObj) {
   const state = String(stateObj.state).toLowerCase();
   if (UNAVAILABLE_STATES.has(state)) return false;
   if (INACTIVE_STATES.has(state)) return false;
+  // Only ever active for a moment, and that moment is tracked by the card.
+  if (isStateless(stateObj)) return false;
   // Numeric entities: any non-zero value counts as active.
   if (VALUE_DOMAINS.has(domainOf(stateObj.entity_id)) && !Number.isNaN(Number(state))) {
     return Number(state) !== 0;
@@ -928,15 +947,15 @@ function computeGridOptions(config) {
  * when: { above: 30 }       -> numeric comparison
  * when: { state: "on" }     -> same as the bare string
  */
-function animationActive(animation, stateObj) {
+function animationActive(animation, stateObj, active = isActiveState(stateObj)) {
   if (!animation || !animation.enabled || animation.type === 'none') return false;
 
   const condition = animation.when;
   if (condition === undefined || condition === null) return true;
   if (condition === 'always' || condition === true) return true;
   if (condition === 'never' || condition === false) return false;
-  if (condition === 'active') return isActiveState(stateObj);
-  if (condition === 'inactive') return !!stateObj && !isActiveState(stateObj);
+  if (condition === 'active') return active;
+  if (condition === 'inactive') return !!stateObj && !active;
   if (condition === 'unavailable') return isUnavailable(stateObj);
 
   if (!stateObj) return false;
@@ -1470,6 +1489,11 @@ class MultiButtonCard extends BaseElement {
     this._armedIndex = -1;
     this._armedKind = null;
     this._armedTimer = null;
+
+    /** Per button: last seen state of a stateless entity, and its flash. */
+    this._lastStateless = [];
+    this._flashUntil = [];
+    this._flashTimers = [];
   }
 
   /* --- Lovelace contract ------------------------------------------------ */
@@ -1499,6 +1523,7 @@ class MultiButtonCard extends BaseElement {
     }
 
     this._signatures = [];
+    this._clearFlashes();
     this._lastWidth = 0;
     this._lastColumns = 0;
     this._build();
@@ -1595,6 +1620,7 @@ class MultiButtonCard extends BaseElement {
     this._unwatchMediaQueries();
     if (this._resizeObserver) this._resizeObserver.disconnect();
     this._clearArmed();
+    this._clearFlashes();
     this._gestures.forEach((gesture) => this._cancelGesture(gesture));
     this._gestures.clear();
   }
@@ -1866,7 +1892,7 @@ class MultiButtonCard extends BaseElement {
       const stateObj = button.entity ? this._hass.states[button.entity] : undefined;
       const missing = !!button.entity && !stateObj;
       const unavailable = !!button.entity && isUnavailable(stateObj);
-      const active = isActiveState(stateObj);
+      const active = isActiveState(stateObj) || this._flashing(index, stateObj);
 
       // One context per templated button per update; buttons without
       // templates never build one.
@@ -1911,7 +1937,7 @@ class MultiButtonCard extends BaseElement {
       const showName = button.show_name === false ? false : resolve(button.show_name) !== false;
       const style = button.style ? resolve(button.style) : null;
 
-      const animate = animationActive(button.animation, stateObj);
+      const animate = animationActive(button.animation, stateObj, active);
       const signature = [
         icon || '',
         name,
@@ -1946,6 +1972,43 @@ class MultiButtonCard extends BaseElement {
     });
 
     this._updateStateReservation();
+  }
+
+  /**
+   * A stateless entity is active for PRESS_FLASH_MS after its timestamp
+   * changes. Measured on this device's clock from when the change arrives,
+   * not from the timestamp itself: a wall tablet's clock drifts, and a second
+   * of drift would swallow the whole flash.
+   */
+  _flashing(index, stateObj) {
+    if (!isStateless(stateObj)) {
+      this._lastStateless[index] = undefined;
+      return false;
+    }
+    const state = String(stateObj.state);
+    const previous = this._lastStateless[index];
+    this._lastStateless[index] = state;
+
+    // The first state seen is history, not a press. Coming back from
+    // unavailable (an HA restart) restores the old timestamp - not a press
+    // either.
+    const pressed = previous !== undefined && previous !== state && previous !== 'unavailable' && state !== 'unavailable';
+    if (pressed) {
+      this._flashUntil[index] = Date.now() + PRESS_FLASH_MS;
+      window.clearTimeout(this._flashTimers[index]);
+      this._flashTimers[index] = window.setTimeout(() => {
+        this._flashTimers[index] = null;
+        this._sync();
+      }, PRESS_FLASH_MS);
+    }
+    return (this._flashUntil[index] || 0) > Date.now();
+  }
+
+  _clearFlashes() {
+    this._flashTimers.forEach((timer) => timer && window.clearTimeout(timer));
+    this._lastStateless = [];
+    this._flashUntil = [];
+    this._flashTimers = [];
   }
 
   /** A row reserves room for the state line as soon as one of its buttons uses it. */
@@ -3379,4 +3442,4 @@ if (inBrowser) {
   );
 }
 
-export { CARD_VERSION, CARD_TAG, REPO_URL, MultiButtonCard, renderTemplate, hasTemplate, templateContext, mergeOwnedKeys, CARD_FORM_KEYS, BUTTON_FORM_KEYS, actionToForm, actionFromForm, confirmationFromConfig, isVisible, conditionMet, collectMediaQueries, MultiButtonCardEditor, pruneDefaults, computeGridOptions, computeContentHeight, partitionRows, computeColumns, computeCellHeight, normalizeConfig, animationActive };
+export { CARD_VERSION, CARD_TAG, REPO_URL, MultiButtonCard, renderTemplate, hasTemplate, templateContext, mergeOwnedKeys, CARD_FORM_KEYS, BUTTON_FORM_KEYS, actionToForm, actionFromForm, confirmationFromConfig, isVisible, conditionMet, collectMediaQueries, MultiButtonCardEditor, pruneDefaults, computeGridOptions, computeContentHeight, partitionRows, computeColumns, computeCellHeight, normalizeConfig, animationActive, isActiveState, isUnavailable };
