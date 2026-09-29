@@ -283,7 +283,7 @@ switch the colour already says everything, so the extra line is left out. Set
 | `entity` | string | Entity for state, colour and default actions |
 | `colspan` | number | Slots this button occupies (default `1`) |
 | `size` | `large` \| `wide` \| `full` | Aliases for `colspan` |
-| `confirmation` | boolean \| `{ text }` | Two-step confirmation, see below |
+| `confirmation` | boolean \| `{ text }` | Two-step confirmation for the tap. Older spelling of `tap_action.confirmation`, see [Actions](#actions) |
 | `visibility` | list | Conditions under which the button is shown, see [Visibility](#visibility) |
 | `style` | string | CSS declarations for this button, see [Per-button styling](#per-button-styling) |
 | `active_color` | CSS colour | Accent for this button's icon and outline when active |
@@ -295,12 +295,6 @@ active state then shows on its icon and outline rather than on the surface.
 | `state_display` | string | Template for the state line, see below |
 | `tap_action` / `hold_action` / `double_tap_action` | map | See [Actions](#actions) |
 | `animation` | map \| string | See [Animations](#animations) |
-
-**`confirmation`** does not open a modal. The first tap arms the button — it
-turns red and shows the confirmation text — and a second tap within four
-seconds runs the action. Nothing happens if you walk away. The built-in text is
-English (`Tap again to confirm`), so set `confirmation.text` if your dashboard
-is in another language.
 
 **`state_display`** is a small placeholder syntax, not Jinja:
 
@@ -507,6 +501,39 @@ action:
 `toggle` handles domains without a `toggle` service correctly: locks are locked
 or unlocked according to their state, buttons are pressed, scenes and scripts
 are turned on.
+
+#### Confirmation
+
+Every action takes `confirmation: true` or `confirmation: { text }`, as in
+Home Assistant's own action grammar — so a tap, a hold and a double tap can
+each ask for it independently:
+
+```yaml
+- name: Alles aus
+  icon: mdi:power
+  tap_action:
+    action: perform-action
+    perform_action: light.turn_off
+    target: { entity_id: all }
+    confirmation: true
+  hold_action:
+    action: perform-action
+    perform_action: script.haus_verlassen
+    confirmation:
+      text: Nochmal halten zum Bestätigen
+```
+
+It does not open a modal. The first gesture arms the button — it turns red and
+shows the confirmation text — and the same gesture again within four seconds
+runs the action. Only the same gesture confirms: a tap on a button armed by a
+hold does not run the hold action. Nothing happens if you walk away. The
+built-in texts are English (`Tap again to confirm`, `Hold again to confirm`,
+`Double-tap again to confirm`), so set `text` if your dashboard is in another
+language.
+
+`confirmation` directly on the button is the older spelling and still works; it
+applies to the tap only. The visual editor shows a switch below each action and
+writes the setting onto the action, moving an old button-level key there.
 
 ### Icons
 

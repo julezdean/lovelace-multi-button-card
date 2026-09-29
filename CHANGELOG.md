@@ -6,6 +6,22 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Confirmation for every gesture, not just the tap. `tap_action`,
+  `hold_action` and `double_tap_action` each take `confirmation: true` or
+  `confirmation: { text }`, the key Home Assistant's own actions use. The
+  button is confirmed by repeating the gesture that armed it, and the built-in
+  prompt says which one (`Hold again to confirm`).
+- The visual editor has a confirmation switch below each action instead of a
+  single one under Display.
+
+### Changed
+
+- The button-level `confirmation` is now the older spelling of
+  `tap_action.confirmation`. It keeps working and still covers the tap only;
+  the editor moves it onto the tap action when the button is edited.
+
 ## [1.7.2] - 2026-09-22
 
 ### Fixed

@@ -118,6 +118,13 @@ const HOLD_DELAY_MS = 500;
 const DOUBLE_TAP_WINDOW_MS = 250;
 const CONFIRM_TIMEOUT_MS = 4000;
 
+/** Built-in confirmation prompts, per gesture: repeat what armed it. */
+const CONFIRM_TEXT = {
+  tap: 'Tap again to confirm',
+  hold: 'Hold again to confirm',
+  double_tap: 'Double-tap again to confirm',
+};
+
 /* -------------------------------------------------------------------------- */
 /* 2. Configuration                                                           */
 /* -------------------------------------------------------------------------- */
@@ -263,7 +270,6 @@ function normalizeButton(raw, index, buttonDefaults, animationDefaults) {
     show_name: src.show_name ?? buttonDefaults.show_name,
     show_state: src.show_state ?? buttonDefaults.show_state,
     state_display: src.state_display ?? null,
-    confirmation: src.confirmation ?? false,
     // CSS declarations for this button, e.g. "border: 2px solid red".
     // Templated like every other presentation field.
     style: src.style ?? null,
@@ -278,6 +284,14 @@ function normalizeButton(raw, index, buttonDefaults, animationDefaults) {
     tap_action: normalizeAction(src.tap_action ?? src.action, src.entity, 'default'),
     hold_action: normalizeAction(src.hold_action, src.entity, 'more-info'),
     double_tap_action: normalizeAction(src.double_tap_action, src.entity, 'none'),
+  };
+
+  // Resolved before the default tap action is filled in below, which would
+  // otherwise drop a `confirmation` given on an action without `action:`.
+  button.confirmation = {
+    tap: normalizeConfirmation(button.tap_action.confirmation ?? src.confirmation),
+    hold: normalizeConfirmation(button.hold_action.confirmation),
+    double_tap: normalizeConfirmation(button.double_tap_action.confirmation),
   };
 
   // A button without any explicit tap action but with an entity toggles it;
@@ -324,6 +338,18 @@ const TEMPLATED_FIELDS = [
   'show_state',
   'style',
 ];
+
+/**
+ * `confirmation` lives on the action, as in Home Assistant's own action
+ * grammar: `true`, `false` or `{ text }`. The button-level key predates that
+ * and still means the tap. Resolves to `null` or `{ text }`, text possibly
+ * null when the built-in one should be used.
+ */
+function normalizeConfirmation(raw) {
+  if (!raw) return null;
+  if (typeof raw === 'object') return { text: raw.text || null };
+  return { text: null };
+}
 
 /** A single condition is allowed where a list is expected. */
 function normalizeVisibility(raw) {
@@ -1442,6 +1468,7 @@ class MultiButtonCard extends BaseElement {
 
     this._gestures = new Map();
     this._armedIndex = -1;
+    this._armedKind = null;
     this._armedTimer = null;
   }
 
@@ -2137,10 +2164,12 @@ class MultiButtonCard extends BaseElement {
 
     if (!action || action.action === 'none') return;
 
-    // Two-step confirmation instead of a modal: the first tap arms the button,
-    // the second one within the timeout runs the action.
-    if (kind === 'tap' && button.confirmation && this._armedIndex !== index) {
-      this._arm(index, el);
+    // Two-step confirmation instead of a modal: the first gesture arms the
+    // button, the same gesture again within the timeout runs the action. Only
+    // the same gesture confirms - a tap must not fire an armed hold action.
+    const confirmation = button.confirmation[kind];
+    if (confirmation && (this._armedIndex !== index || this._armedKind !== kind)) {
+      this._arm(index, kind, el);
       return;
     }
     this._clearArmed();
@@ -2149,17 +2178,15 @@ class MultiButtonCard extends BaseElement {
     performAction(this._hass, action, el);
   }
 
-  _arm(index, el) {
+  _arm(index, kind, el) {
     this._clearArmed();
     this._armedIndex = index;
+    this._armedKind = kind;
     el.classList.add('armed');
 
     const button = this._config.buttons[index];
     const cell = this._cells[index];
-    const text =
-      typeof button.confirmation === 'object' && button.confirmation.text
-        ? button.confirmation.text
-        : 'Tap again to confirm';
+    const text = button.confirmation[kind].text || CONFIRM_TEXT[kind];
     if (cell) {
       cell.state.dataset.previous = cell.state.textContent;
       cell.state.textContent = text;
@@ -2188,6 +2215,7 @@ class MultiButtonCard extends BaseElement {
     // The next sync must repaint this button, so drop its signature first.
     this._signatures[this._armedIndex] = null;
     this._armedIndex = -1;
+    this._armedKind = null;
   }
 }
 
@@ -2274,7 +2302,9 @@ const LABELS = {
   icon: 'Icon',
   label: 'Label',
   colspan: 'Width in slots',
-  confirmation: 'Ask for confirmation',
+  confirm_tap: 'Confirm tap',
+  confirm_hold: 'Confirm hold',
+  confirm_double_tap: 'Confirm double tap',
   state_display: 'State text',
   tap_action: 'Tap',
   hold_action: 'Hold',
@@ -2471,8 +2501,11 @@ const BUTTON_SCHEMA = [
     icon: 'mdi:gesture-tap',
     schema: [
       { name: 'tap_action', selector: { ui_action: { actions: ACTION_TYPES } } },
+      { name: 'confirm_tap', selector: { boolean: {} } },
       { name: 'hold_action', selector: { ui_action: { actions: ACTION_TYPES } } },
+      { name: 'confirm_hold', selector: { boolean: {} } },
       { name: 'double_tap_action', selector: { ui_action: { actions: ACTION_TYPES } } },
+      { name: 'confirm_double_tap', selector: { boolean: {} } },
     ],
   },
   {
@@ -2502,7 +2535,6 @@ const BUTTON_SCHEMA = [
       { name: 'label', selector: { text: {} } },
       { name: 'state_display', selector: { text: {} } },
       { name: 'icon_size', selector: { number: { min: 12, max: 96, mode: 'slider' } } },
-      { name: 'confirmation', selector: { boolean: {} } },
     ],
   },
   {
@@ -2598,6 +2630,33 @@ const BUTTON_FORM_KEYS = [
   'animation',
   'layout',
 ];
+
+/**
+ * The editor shows confirmation as a switch next to each action, but stores it
+ * where the card and Home Assistant expect it: on the action. The action
+ * picker never sees the key, so it cannot drop or duplicate it.
+ */
+function confirmationFromConfig(button, kind) {
+  const action = button[`${kind}_action`];
+  const own = action && typeof action === 'object' ? action.confirmation : undefined;
+  // The button-level key is the old spelling for the tap.
+  return own ?? (kind === 'tap' ? button.confirmation : undefined);
+}
+
+function actionToForm(action) {
+  if (!action || typeof action !== 'object') return action;
+  const { confirmation, ...rest } = action;
+  return Object.keys(rest).length > 0 ? rest : undefined;
+}
+
+function actionFromForm(action, confirm, previous) {
+  const base = action && typeof action === 'object' ? actionToForm(action) : action;
+  if (!confirm) return base;
+  // Keep a custom text set in YAML rather than flattening it to `true`.
+  const confirmation = previous && typeof previous === 'object' ? previous : true;
+  if (typeof base === 'string') return { action: base, confirmation };
+  return { ...(base || {}), confirmation };
+}
 
 /** `show_state` round-trips through a select, which only carries strings. */
 function showStateToForm(value) {
@@ -3006,10 +3065,12 @@ class MultiButtonCardEditor extends BaseElement {
       layout: button.layout ?? (this._config.button || {}).layout ?? 'vertical',
       show_name: button.show_name ?? true,
       show_state: showStateToForm(button.show_state),
-      confirmation: button.confirmation === true || (button.confirmation && typeof button.confirmation === 'object'),
-      tap_action: button.tap_action,
-      hold_action: button.hold_action,
-      double_tap_action: button.double_tap_action,
+      tap_action: actionToForm(button.tap_action),
+      hold_action: actionToForm(button.hold_action),
+      double_tap_action: actionToForm(button.double_tap_action),
+      confirm_tap: Boolean(confirmationFromConfig(button, 'tap')),
+      confirm_hold: Boolean(confirmationFromConfig(button, 'hold')),
+      confirm_double_tap: Boolean(confirmationFromConfig(button, 'double_tap')),
       animation: { ...DEFAULT_ANIMATION, ...(this._config.animation || {}), ...(button.animation || {}) },
     };
   }
@@ -3035,17 +3096,21 @@ class MultiButtonCardEditor extends BaseElement {
         layout: value.layout,
         show_name: value.show_name,
         show_state: showStateFromForm(value.show_state),
-        confirmation: value.confirmation,
-        tap_action: value.tap_action,
-        hold_action: value.hold_action,
-        double_tap_action: value.double_tap_action,
+        // The button-level `confirmation` is not written back: it is an owned
+        // key, so the merge below removes it, and the tap carries it instead.
+        tap_action: actionFromForm(value.tap_action, value.confirm_tap, confirmationFromConfig(previous, 'tap')),
+        hold_action: actionFromForm(value.hold_action, value.confirm_hold, confirmationFromConfig(previous, 'hold')),
+        double_tap_action: actionFromForm(
+          value.double_tap_action,
+          value.confirm_double_tap,
+          confirmationFromConfig(previous, 'double_tap'),
+        ),
         animation: value.animation,
       },
       {
         colspan: 1,
         show_name: true,
         show_state: 'auto',
-        confirmation: false,
         layout: (this._config.button || {}).layout ?? 'vertical',
         icon_size: toNumber((this._config.button || {}).icon_size, undefined),
         icon_color: (this._config.button || {}).icon_color,
@@ -3314,4 +3379,4 @@ if (inBrowser) {
   );
 }
 
-export { CARD_VERSION, CARD_TAG, REPO_URL, MultiButtonCard, renderTemplate, hasTemplate, templateContext, mergeOwnedKeys, CARD_FORM_KEYS, BUTTON_FORM_KEYS, isVisible, conditionMet, collectMediaQueries, MultiButtonCardEditor, pruneDefaults, computeGridOptions, computeContentHeight, partitionRows, computeColumns, computeCellHeight, normalizeConfig, animationActive };
+export { CARD_VERSION, CARD_TAG, REPO_URL, MultiButtonCard, renderTemplate, hasTemplate, templateContext, mergeOwnedKeys, CARD_FORM_KEYS, BUTTON_FORM_KEYS, actionToForm, actionFromForm, confirmationFromConfig, isVisible, conditionMet, collectMediaQueries, MultiButtonCardEditor, pruneDefaults, computeGridOptions, computeContentHeight, partitionRows, computeColumns, computeCellHeight, normalizeConfig, animationActive };

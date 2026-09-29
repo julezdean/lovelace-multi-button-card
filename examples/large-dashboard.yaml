@@ -25,13 +25,13 @@ buttons:
   - name: Alles aus
     icon: mdi:power
     colspan: 2
-    confirmation:
-      text: Nochmal tippen
     tap_action:
       action: call-service
       service: homeassistant.turn_off
       target:
         entity_id: group.alle_lichter
+      confirmation:
+        text: Nochmal tippen
 
   - name: Wohnzimmer
     icon: mdi:sofa
