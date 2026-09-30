@@ -38,8 +38,12 @@ export function cardFormData(config: Dict): Dict {
     title: config.title ?? '',
     layout: { ...DEFAULT_LAYOUT, ...((config.layout as Dict) || {}) },
     appearance: { ...DEFAULT_APPEARANCE, ...((config.appearance as Dict) || {}) },
-    item: { ...DEFAULT_ITEM, ...((config.item as Dict) || {}), ...pick(config.button, ITEM_KEYS) },
-    button: { ...DEFAULT_BUTTON, ...omit(config.button, ITEM_KEYS) },
+    item: {
+      ...DEFAULT_ITEM,
+      ...((config.item as Dict) || {}),
+      ...pick(config.button, ITEM_KEYS),
+      button_layout: (isDict(config.button) && config.button.layout) || DEFAULT_BUTTON.layout,
+    },
     animation: { ...DEFAULT_ANIMATION, ...((config.animation as Dict) || {}) },
   };
 }
@@ -56,9 +60,13 @@ export function cardFormToConfig(config: Dict, value: Dict): Dict {
       title: value.title,
       layout: value.layout,
       appearance: value.appearance,
-      item: value.item,
-      // Cell keys live in `item:` from here on, so they leave `button:`.
-      button: omit(value.button, ITEM_KEYS),
+      item: omit(value.item, ['button_layout']),
+      // Cell keys live in `item:` from here on, so they leave `button:`; what
+      // the form does not show there (show_state, say) stays.
+      button: {
+        ...omit(config.button, [...ITEM_KEYS, 'layout']),
+        layout: isDict(value.item) ? value.item.button_layout : undefined,
+      },
       animation: value.animation,
     },
     {

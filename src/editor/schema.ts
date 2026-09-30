@@ -96,6 +96,14 @@ export const SHOW_DRAWING_FIELD = {
   },
 };
 
+/** How large an item's icon and name are - every type has both. */
+export const SIZE_FIELDS = [
+  { name: 'icon_size', selector: { number: { min: 12, max: 96, mode: 'slider' } } },
+  { name: 'label_size', selector: { number: { min: 8, max: 32, mode: 'slider' } } },
+];
+
+export const ICON_COLOR_FIELD = { name: 'icon_color', selector: { text: {} } };
+
 /** Labels, so the form does not show raw config keys. */
 export const LABELS: Record<string, string> = {
   title: 'Title',
@@ -175,5 +183,6 @@ export const LABELS: Record<string, string> = {
   min_bound_range: 'Minimum range',
   unit: 'Unit',
   active_when: 'Active when (template)',
+  button_layout: 'Icon and text (buttons)',
   show_drawing: 'Show the drawing',
 };

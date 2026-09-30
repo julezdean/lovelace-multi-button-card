@@ -376,6 +376,7 @@ export class MultiButtonCard extends BaseElement {
     if (!item.hasTemplates) this._applyColours(el, item);
     if (item.label_size)
       el.style.setProperty('--mbc-label-size', cssLength(item.label_size, '14px'));
+    if (item.icon_size) el.style.setProperty('--mbc-icon-size', cssLength(item.icon_size, '30px'));
 
     const itemType = getItemType(item.type);
     let parts: CellParts;
@@ -433,6 +434,7 @@ export class MultiButtonCard extends BaseElement {
     set('--mbc-btn-custom-bg', colours.background);
     set('--mbc-btn-active-bg', colours.active_background);
     set('--mbc-accent', colours.active_color);
+    set('--mbc-icon-color', colours.icon_color);
   }
 
   /* --- Layout ----------------------------------------------------------- */
@@ -613,6 +615,7 @@ export class MultiButtonCard extends BaseElement {
           background: resolve(item.background),
           active_background: resolve(item.active_background),
           active_color: resolve(item.active_color),
+          icon_color: resolve(item.icon_color),
         }
       : null;
     const style = item.style ? resolve(item.style) : null;
@@ -879,6 +882,7 @@ export class MultiButtonCard extends BaseElement {
       }
       if (gesture.held) {
         gesture.held = false;
+        this._releaseArmed(index);
         return;
       }
 
@@ -901,6 +905,9 @@ export class MultiButtonCard extends BaseElement {
 
     el.addEventListener('pointercancel', () => {
       el.classList.remove('pressed');
+      // A touch screen may end a long press this way rather than with a
+      // pointerup - the finger moved a little. What it armed stays armed.
+      if (gesture.held) this._releaseArmed(index);
       this._cancelGesture(gesture);
     });
     el.addEventListener('pointerleave', () => {
@@ -971,7 +978,22 @@ export class MultiButtonCard extends BaseElement {
     }
     haptic(el, 'warning');
 
+    // The time to confirm runs from when the finger comes off: a hold arms
+    // while the finger is still down, and holding on must not use it up.
+    const gesture = this._gestures.get(el);
+    if (!(kind === 'hold' && gesture && gesture.pointerId !== null)) this._startArmedTimer();
+  }
+
+  private _startArmedTimer(): void {
+    if (this._armedTimer) window.clearTimeout(this._armedTimer);
     this._armedTimer = window.setTimeout(() => this._clearArmed(), CONFIRM_TIMEOUT_MS);
+  }
+
+  /** The hold that armed this item has ended; now the time to confirm starts. */
+  private _releaseArmed(index: number): void {
+    if (this._armedIndex === index && this._armedKind === 'hold' && !this._armedTimer) {
+      this._startArmedTimer();
+    }
   }
 
   private _clearArmed(): void {

@@ -37,6 +37,9 @@ export const DEFAULT_ITEM: Dict = {
   color: null,
   active_color: null,
   label_size: null,
+  icon_size: null,
+  icon_color: null,
+  show_name: true,
   press_effect: 'scale', // scale | fade | none
 };
 
@@ -48,6 +51,7 @@ const ITEM_TEMPLATED_FIELDS = [
   'active_color',
   'background',
   'active_background',
+  'icon_color',
   'style',
   'active_when',
   'show_drawing',
@@ -148,6 +152,8 @@ function normalizeItem(
     color: src.color ?? defaults.color,
     active_color: src.active_color ?? src.color ?? defaults.active_color,
     label_size: src.label_size ?? defaults.label_size,
+    icon_size: src.icon_size ?? defaults.icon_size,
+    icon_color: src.icon_color ?? defaults.icon_color,
     press_effect: (src.press_effect ?? defaults.press_effect) as string,
     // CSS declarations for this item, e.g. "border: 2px solid red".
     // Templated like every other presentation field.

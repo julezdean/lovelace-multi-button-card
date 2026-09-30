@@ -73,6 +73,38 @@ export function actionFromForm(action: unknown, confirm: unknown, previous: unkn
   return { ...((base as Dict) || {}), confirmation };
 }
 
+/**
+ * The sizes and the icon colour every type has, form <-> config. A size
+ * equal to what the card or the type block already sets is not written out.
+ */
+export function cellToForm(item: Dict, inherited: Dict): Dict {
+  const size = (key: string) => {
+    const n = parseFloat(String(item[key] ?? inherited[key] ?? ''));
+    return Number.isFinite(n) ? n : undefined;
+  };
+  return {
+    icon_size: size('icon_size'),
+    label_size: size('label_size'),
+    icon_color: item.icon_color ?? '',
+  };
+}
+
+export function cellFromForm(value: Dict): Dict {
+  return { icon_size: value.icon_size, label_size: value.label_size, icon_color: value.icon_color };
+}
+
+export function cellDefaults(inherited: Dict): Dict {
+  const size = (key: string) => {
+    const n = parseFloat(String(inherited[key] ?? ''));
+    return Number.isFinite(n) ? n : undefined;
+  };
+  return {
+    icon_size: size('icon_size'),
+    label_size: size('label_size'),
+    icon_color: inherited.icon_color ?? undefined,
+  };
+}
+
 /** A tri-state (`auto` / true / false) round-trips through a select, which only carries strings. */
 export function triStateToForm(value: unknown): string {
   if (value === true) return 'true';

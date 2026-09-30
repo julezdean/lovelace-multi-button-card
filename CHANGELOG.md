@@ -6,6 +6,26 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [1.9.0-beta.11] - 2026-09-30
+
+### Changed
+
+- `icon_size`, `icon_color` and `show_name` belong to the cell, as
+  `label_size` already did: they apply to every item type, set in `item:`,
+  a type's block or on the item. Each type's page in the editor has the
+  sizes and the icon colour.
+- The card's editor shows one **Item defaults** section instead of item and
+  button defaults side by side. The arrangement of icon and text, which only
+  buttons have, is there as *Icon and text (buttons)* and still stored
+  under `button:`.
+
+### Fixed
+
+- The four seconds to confirm a hold ran from the moment it armed, while the
+  finger was still down. Holding on used them up, and the tap that followed
+  ran the tap action. They now start when the finger comes off - also when a
+  touch screen ends the long press with a cancel rather than a release.
+
 ## [1.9.0-beta.10] - 2026-09-30
 
 ### Added

@@ -2,7 +2,7 @@ import { animationActive, normalizeAnimation } from '../../core/animation';
 import { formatState, VALUE_DOMAINS } from '../../core/state';
 import { hasTemplate, identity, type Resolve } from '../../core/templates';
 import type { AnimationConfig, Dict, HassEntity, HomeAssistant, ItemBase } from '../../types';
-import { cssLength, domainOf } from '../../utils';
+import { domainOf } from '../../utils';
 import type { CellParts, ItemType, SyncContext } from '../item-type';
 import { buttonEditor } from './editor';
 import { BUTTON_STYLES } from './styles';
@@ -12,8 +12,6 @@ export interface ButtonItem extends ItemBase {
   name: unknown;
   label: unknown;
   icon: unknown;
-  icon_color: unknown;
-  icon_size: unknown;
   show_name: unknown;
   show_state: unknown;
   state_display: unknown;
@@ -33,13 +31,9 @@ interface ButtonView {
   secondary: string;
   animate: boolean;
   showName: boolean;
-  iconColor: unknown;
 }
 
 export const DEFAULT_BUTTON: Dict = {
-  icon_color: null,
-  icon_size: null,
-  show_name: true,
   show_state: 'auto',
   /**
    * How the icon and the text sit together: `vertical` (icon above) or
@@ -71,7 +65,6 @@ const TEMPLATED_FIELDS = [
   'label',
   'icon',
   'state_display',
-  'icon_color',
   'show_name',
   'show_state',
 ] as const;
@@ -185,8 +178,6 @@ export const buttonType: ItemType<ButtonItem, ButtonParts, ButtonView> = {
       name: src.name ?? null,
       label: src.label ?? null,
       icon: src.icon ?? null,
-      icon_color: src.icon_color ?? defaults.icon_color,
-      icon_size: src.icon_size ?? defaults.icon_size,
       layout: (src.layout ?? defaults.layout) as string,
       show_name: src.show_name ?? defaults.show_name,
       show_state: src.show_state ?? defaults.show_state,
@@ -199,12 +190,6 @@ export const buttonType: ItemType<ButtonItem, ButtonParts, ButtonView> = {
     if (button.name && typeof button.name === 'string' && !hasTemplate(button.name)) {
       root.dataset.name = button.name;
     }
-    if (button.icon_size) {
-      root.style.setProperty('--mbc-icon-size', cssLength(button.icon_size, '30px'));
-    }
-    // Templated colours are applied per sync instead, since their value
-    // depends on state that only exists at that point.
-    if (!button.hasTemplates) setProperty(root, '--mbc-icon-color', button.icon_color);
 
     const icon = document.createElement('ha-icon');
     icon.className = 'icon';
@@ -253,13 +238,11 @@ export const buttonType: ItemType<ButtonItem, ButtonParts, ButtonView> = {
       secondary,
       animate: animationActive(button.animation, stateObj, active),
       showName: button.show_name === false ? false : resolve(button.show_name) !== false,
-      iconColor: button.hasTemplates ? resolve(button.icon_color) : undefined,
     };
   },
 
   paint(parts, button, view, context) {
     renderIcon(parts, view, context);
-    if (button.hasTemplates) setProperty(parts.root, '--mbc-icon-color', view.iconColor);
 
     const showName = view.showName !== false && !!view.name;
     parts.name.textContent = showName ? view.name : '';
@@ -295,11 +278,6 @@ export const buttonType: ItemType<ButtonItem, ButtonParts, ButtonView> = {
 
   editor: buttonEditor,
 };
-
-function setProperty(el: HTMLElement, property: string, value: unknown): void {
-  if (value === undefined || value === null || value === '') el.style.removeProperty(property);
-  else el.style.setProperty(property, String(value));
-}
 
 /**
  * Swap between <ha-icon> and <ha-state-icon> only when the kind actually

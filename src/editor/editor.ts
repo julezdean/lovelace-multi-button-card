@@ -82,20 +82,14 @@ const cardSchema = (mode: string) => [
     schema: [
       { name: 'radius', selector: { number: { min: 0, max: 60, mode: 'box' } } },
       { name: 'label_size', selector: { number: { min: 8, max: 32, mode: 'slider' } } },
-      { name: 'active_color', selector: { text: {} } },
-      PRESS_EFFECT_SELECT,
-    ],
-  },
-  {
-    type: 'expandable',
-    name: 'button',
-    title: 'Button defaults',
-    icon: 'mdi:gesture-tap-button',
-    schema: [
       { name: 'icon_size', selector: { number: { min: 12, max: 96, mode: 'slider' } } },
       { name: 'icon_color', selector: { text: {} } },
+      { name: 'active_color', selector: { text: {} } },
       { name: 'show_name', selector: { boolean: {} } },
-      LAYOUT_SELECT,
+      PRESS_EFFECT_SELECT,
+      // Only buttons arrange icon and text either way; it is stored under
+      // `button:`, but belongs with the rest of how an item looks.
+      { ...LAYOUT_SELECT, name: 'button_layout' },
     ],
   },
   {

@@ -4,6 +4,7 @@ import {
   ACTIVE_WHEN_FIELD,
   ANIMATION_SCHEMA,
   LAYOUT_SELECT,
+  SIZE_FIELDS,
 } from '../../editor/schema';
 import {
   actionFromForm,
@@ -48,7 +49,7 @@ const BUTTON_SCHEMA = [
       },
       { name: 'label', selector: { text: {} } },
       { name: 'state_display', selector: { text: {} } },
-      { name: 'icon_size', selector: { number: { min: 12, max: 96, mode: 'slider' } } },
+      ...SIZE_FIELDS,
     ],
   },
   {
@@ -84,6 +85,7 @@ export const BUTTON_FORM_KEYS = [
   'label',
   'state_display',
   'icon_size',
+  'label_size',
   'icon_color',
   'active_color',
   'background',
@@ -121,6 +123,7 @@ export const buttonEditor: ItemEditor = {
       label: button.label ?? '',
       state_display: button.state_display ?? '',
       icon_size: toNumber(button.icon_size ?? defaults.icon_size, undefined),
+      label_size: toNumber(button.label_size ?? defaults.label_size, undefined),
       icon_color: button.icon_color ?? '',
       active_color: button.active_color ?? '',
       background: button.background ?? '',
@@ -155,6 +158,7 @@ export const buttonEditor: ItemEditor = {
         label: value.label,
         state_display: value.state_display,
         icon_size: value.icon_size,
+        label_size: value.label_size,
         icon_color: value.icon_color,
         active_color: value.active_color,
         background: value.background,
@@ -189,6 +193,7 @@ export const buttonEditor: ItemEditor = {
         show_state: 'auto',
         layout: defaults.layout ?? 'vertical',
         icon_size: toNumber(defaults.icon_size, undefined),
+        label_size: toNumber(defaults.label_size, undefined),
         icon_color: defaults.icon_color,
         active_color: defaults.active_color,
         // Inherited from the card, so only a genuine deviation is written out.

@@ -4,10 +4,15 @@ import {
   ACTIVE_WHEN_FIELD,
   select,
   SHOW_DRAWING_FIELD,
+  SIZE_FIELDS,
+  ICON_COLOR_FIELD,
 } from '../../editor/schema';
 import {
   actionFromForm,
   actionToForm,
+  cellDefaults,
+  cellFromForm,
+  cellToForm,
   confirmationFromConfig,
   pruneDefaults,
 } from '../../editor/transform';
@@ -117,6 +122,7 @@ function schema(type: ProgressItem['type']): unknown[] {
       schema: [
         ...drawingSchema(type),
         SHOW_DRAWING_FIELD,
+        ...SIZE_FIELDS,
         { name: 'show_name', selector: { boolean: {} } },
         { name: 'label', selector: { text: {} } },
       ],
@@ -160,6 +166,7 @@ function schema(type: ProgressItem['type']): unknown[] {
       icon: 'mdi:palette-outline',
       schema: [
         { name: 'active_color', selector: { text: {} } },
+        ICON_COLOR_FIELD,
         { name: 'background', selector: { text: {} } },
         { name: 'active_background', selector: { text: {} } },
         { name: 'style', selector: { text: { multiline: true } } },
@@ -224,6 +231,9 @@ const FORM_KEYS = [
   'background',
   'active_background',
   'style',
+  'icon_size',
+  'label_size',
+  'icon_color',
   'active_when',
   'show_drawing',
   'animation',
@@ -302,6 +312,7 @@ export function progressEditor(type: ProgressItem['type'], label: string): ItemE
         background: item.background ?? '',
         active_background: item.active_background ?? '',
         style: item.style ?? '',
+        ...cellToForm(item, withDefaults({}, config, type)),
         active_when: item.active_when ?? '',
         show_drawing: item.show_drawing ?? 'always',
         animation: {
@@ -371,6 +382,7 @@ export function progressEditor(type: ProgressItem['type'], label: string): ItemE
           background: value.background,
           active_background: value.active_background,
           style: value.style,
+          ...cellFromForm(value),
           active_when: value.active_when,
           show_drawing: value.show_drawing,
           animation: value.animation,
@@ -379,6 +391,7 @@ export function progressEditor(type: ProgressItem['type'], label: string): ItemE
           colspan: 1,
           show_name: true,
           show_drawing: 'always',
+          ...cellDefaults(inherited),
           source: { type: 'auto' },
           progress: { direction: 'remaining' },
           format: { style: 'auto', show_seconds: 'auto', decimals: 0 },

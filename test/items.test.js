@@ -85,11 +85,34 @@ test('a template in a cell field marks the item as templated', () => {
 
 /* -- the editor's card page ------------------------------------------------ */
 
-test('the item section shows cell keys from button:, which win as in the card', () => {
-  const data = cardFormData({ item: { radius: 8 }, button: { radius: 12, layout: 'horizontal' } });
+test('one item section shows it all - cell keys from button: win there, as in the card', () => {
+  const data = cardFormData({ item: { radius: 8 }, button: { radius: 12, layout: 'horizontal', icon_size: 40 } });
   assert.equal(data.item.radius, 12);
-  assert.equal(data.button.layout, 'horizontal');
-  assert.equal('radius' in data.button, false, 'the button section does not own radius');
+  assert.equal(data.item.icon_size, 40, 'icon size is an item default now');
+  assert.equal(data.item.button_layout, 'horizontal', 'the buttons-only arrangement is shown there too');
+  assert.equal('button' in data, false, 'there is no separate button section any more');
+});
+
+test('icon size, icon colour and show_name apply to every type', () => {
+  const config = normalizeConfig({
+    item: { icon_size: 40, icon_color: 'red', show_name: false, label_size: 15 },
+    items: [{ entity: 'light.a' }, { type: 'ring', entity: 'timer.a' }, { type: 'graph', entity: 'sensor.a' }],
+  });
+  for (const it of config.items) {
+    assert.equal(it.icon_size, 40, it.type);
+    assert.equal(it.icon_color, 'red', it.type);
+    assert.equal(it.label_size, 15, it.type);
+    assert.equal(it.show_name, false, it.type);
+  }
+});
+
+test('the buttons-only arrangement is written back under button:, everything else under item:', () => {
+  const config = { type: `custom:${CARD_TAG}`, button: { show_state: true }, items: [{}] };
+  const value = cardFormData(config);
+  value.item = { ...value.item, icon_size: 36, button_layout: 'horizontal' };
+  const next = cardFormToConfig(config, value);
+  assert.deepEqual(next.item, { icon_size: 36 });
+  assert.deepEqual(next.button, { show_state: true, layout: 'horizontal' }, 'show_state is kept');
 });
 
 test('an edit moves cell keys from button: to item:', () => {

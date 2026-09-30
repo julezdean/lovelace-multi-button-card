@@ -111,6 +111,8 @@ export interface ItemBase {
   color: unknown;
   active_color: unknown;
   label_size: unknown;
+  icon_size: unknown;
+  icon_color: unknown;
   press_effect: string;
   style: unknown;
   /**

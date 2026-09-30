@@ -71,7 +71,7 @@ Adding it by hand instead:
    - Type: **JavaScript module**
 3. Reload the browser
 
-Confirm it loaded: the browser console prints `multi-button-card v1.9.0-beta.10` on
+Confirm it loaded: the browser console prints `multi-button-card v1.9.0-beta.11` on
 startup.
 
 ---
@@ -335,20 +335,24 @@ items. A type's own defaults block (`button:`) may set them too and wins over
 | `active_background` | CSS colour | slightly brighter | Active background |
 | `active_color` | CSS colour | `--state-active-color` | Accent for icon and outline |
 | `label_size` | number \| string | derived from height | Fixed size of the name |
+| `icon_size` | number \| string | derived from height | Fixed size of the icon |
+| `icon_color` | CSS colour | secondary text | Inactive icon colour |
+| `show_name` | boolean | `true` | Show the name line |
 | `press_effect` | `scale` \| `fade` \| `none` | `scale` | Touch feedback |
 
 Before 1.9 these lived in `button:`, where they still work. The visual editor
-moves them to `item:` the next time it saves the card options.
+shows them all under **Item defaults** and moves them to `item:` the next time
+it saves the card options. Every one of them can also be set on a single item,
+of any type.
 
 ### `button` (defaults for all buttons)
 
-Every key here can also be set on an individual button, where it wins.
+What only buttons have. Every key here can also be set on an individual
+button, where it wins. In the editor, `layout` sits under **Item defaults** as
+*Icon and text (buttons)*.
 
 | Option | Type | Default | Description |
 |---|---|---|---|
-| `icon_color` | CSS colour | secondary text | Inactive icon colour |
-| `icon_size` | number \| string | derived from height | Fixed icon size |
-| `show_name` | boolean | `true` | Show the name line |
 | `show_state` | boolean \| `auto` | `auto` | See below |
 | `layout` | `vertical` \| `horizontal` | `vertical` | Icon above or beside the text |
 
@@ -609,7 +613,8 @@ each ask for it independently:
 
 It does not open a modal. The first gesture arms the item — it turns red and
 shows the confirmation text — and a **tap** within four seconds runs what was
-armed. A tap confirms whatever armed it: on an item armed by a hold, the tap
+armed. The four seconds start when the finger comes off, so holding on after
+the item armed does not use them up. A tap confirms whatever armed it: on an item armed by a hold, the tap
 runs the hold action, not the tap action. Holding again only arms it anew.
 Nothing happens if you walk away. The built-in texts are English
 (`Tap again to confirm`, `Tap to confirm`), so set `text` if your dashboard is in another

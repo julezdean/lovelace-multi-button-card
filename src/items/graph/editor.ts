@@ -2,12 +2,17 @@ import { AGGREGATE_FUNCS } from '../../graph/aggregate';
 import {
   ACTIONS_SECTION,
   ACTIVE_WHEN_FIELD,
-  select,
+  ICON_COLOR_FIELD,
   SHOW_DRAWING_FIELD,
+  SIZE_FIELDS,
+  select,
 } from '../../editor/schema';
 import {
   actionFromForm,
   actionToForm,
+  cellDefaults,
+  cellFromForm,
+  cellToForm,
   confirmationFromConfig,
   pruneDefaults,
 } from '../../editor/transform';
@@ -78,6 +83,7 @@ const SCHEMA = [
     icon: 'mdi:text-short',
     schema: [
       SHOW_DRAWING_FIELD,
+      ...SIZE_FIELDS,
       { name: 'show_name', selector: { boolean: {} } },
       { name: 'label', selector: { text: {} } },
       { name: 'unit', selector: { text: {} } },
@@ -92,6 +98,7 @@ const SCHEMA = [
     icon: 'mdi:palette-outline',
     schema: [
       { name: 'active_color', selector: { text: {} } },
+      ICON_COLOR_FIELD,
       { name: 'background', selector: { text: {} } },
       { name: 'style', selector: { text: { multiline: true } } },
     ],
@@ -127,9 +134,18 @@ const FORM_KEYS = [
   'active_color',
   'background',
   'style',
+  'icon_size',
+  'label_size',
+  'icon_color',
   'active_when',
   'show_drawing',
 ] as const;
+
+/** What a graph inherits for its cell: `item:`, then the `graph:` block. */
+const cellInherited = (config: Dict): Dict => ({
+  ...((config.item as Dict) || {}),
+  ...((config.graph as Dict) || {}),
+});
 
 const FORM_DEFAULTS: Dict = {
   graph_layout: 'split',
@@ -194,6 +210,7 @@ export const graphEditor: ItemEditor = {
       active_color: item.active_color ?? '',
       background: item.background ?? '',
       style: item.style ?? '',
+      ...cellToForm(item, cellInherited(config)),
       active_when: item.active_when ?? '',
       show_drawing: item.show_drawing ?? 'always',
     };
@@ -248,10 +265,11 @@ export const graphEditor: ItemEditor = {
         active_color: value.active_color,
         background: value.background,
         style: value.style,
+        ...cellFromForm(value),
         active_when: value.active_when,
         show_drawing: value.show_drawing,
       },
-      defaults,
+      { ...defaults, ...cellDefaults(cellInherited(config)) },
     );
     if (previous.icon && typeof previous.icon === 'object' && !value.icon)
       next.icon = previous.icon;
