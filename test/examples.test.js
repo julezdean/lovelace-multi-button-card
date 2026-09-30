@@ -3,11 +3,11 @@
  * that does not parse is worse than none. Every file here goes through the same
  * normalizeConfig() the card uses, so a broken example fails the build.
  */
-import test from 'node:test';
+import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
 import { parse } from 'yaml';
-import { normalizeConfig } from '../multi-button-card.js';
+import { normalizeConfig } from '../src/main.ts';
 
 const DIR = new URL('../examples/', import.meta.url);
 const FILES = readdirSync(DIR).filter((name) => name.endsWith('.yaml'));
@@ -23,9 +23,9 @@ for (const file of FILES) {
     assert.equal(raw.type, 'custom:multi-button-card', 'wrong card type');
 
     const config = normalizeConfig(raw);
-    assert.ok(config.buttons.length > 0);
+    assert.ok(config.items.length > 0);
 
-    config.buttons.forEach((button, index) => {
+    config.items.forEach((button, index) => {
       const where = `${file} button ${index} (${button.name || button.entity || '?'})`;
 
       assert.equal(button.error, null, `${where}: ${button.error}`);
@@ -51,7 +51,7 @@ for (const file of FILES) {
       // An animation type that fell back to 'none' means the example named a
       // type that does not exist.
       if (button.animation.type === 'none') {
-        const source = raw.buttons[index].animation ?? raw.animation;
+        const source = (raw.items ?? raw.buttons)[index].animation ?? raw.animation;
         const requested = typeof source === 'object' ? source && source.type : source;
         assert.ok(
           requested === undefined || requested === 'none',

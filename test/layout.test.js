@@ -1,4 +1,4 @@
-import test from 'node:test';
+import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import {
   partitionRows,
@@ -10,7 +10,7 @@ import {
   isUnavailable,
   computeGridOptions,
   computeContentHeight,
-} from '../multi-button-card.js';
+} from '../src/main.ts';
 
 const ones = (n) => Array.from({ length: n }, () => 1);
 const cfg = (overrides = {}) =>
@@ -145,25 +145,25 @@ test('an entity without a tap_action toggles; without an entity it does nothing'
   const config = normalizeConfig({
     buttons: [{ entity: 'light.a' }, { name: 'plain' }],
   });
-  assert.deepEqual(config.buttons[0].tap_action, { action: 'toggle', entity: 'light.a' });
-  assert.equal(config.buttons[1].tap_action.action, 'none');
-  assert.equal(config.buttons[1].hold_action.action, 'none');
+  assert.deepEqual(config.items[0].tap_action, { action: 'toggle', entity: 'light.a' });
+  assert.equal(config.items[1].tap_action.action, 'none');
+  assert.equal(config.items[1].hold_action.action, 'none');
 });
 
 test('the bare { service, target } shorthand becomes a call-service action', () => {
   const config = normalizeConfig({
     buttons: [{ action: { service: 'light.turn_on', target: { entity_id: 'light.a' } } }],
   });
-  assert.equal(config.buttons[0].tap_action.action, 'call-service');
-  assert.equal(config.buttons[0].tap_action.service, 'light.turn_on');
+  assert.equal(config.items[0].tap_action.action, 'call-service');
+  assert.equal(config.items[0].tap_action.service, 'light.turn_on');
 });
 
 test('perform-action is accepted as a synonym for call-service', () => {
   const config = normalizeConfig({
     buttons: [{ tap_action: { action: 'perform-action', perform_action: 'scene.turn_on' } }],
   });
-  assert.equal(config.buttons[0].tap_action.action, 'call-service');
-  assert.equal(config.buttons[0].tap_action.service, 'scene.turn_on');
+  assert.equal(config.items[0].tap_action.action, 'call-service');
+  assert.equal(config.items[0].tap_action.service, 'scene.turn_on');
 });
 
 test('card-level animation is inherited and overridable per button', () => {
@@ -171,21 +171,21 @@ test('card-level animation is inherited and overridable per button', () => {
     animation: { type: 'breathe', duration: 3 },
     buttons: [{ entity: 'light.a' }, { entity: 'light.b', animation: { type: 'spin' } }],
   });
-  assert.equal(config.buttons[0].animation.type, 'breathe');
-  assert.equal(config.buttons[0].animation.duration, '3s');
-  assert.equal(config.buttons[1].animation.type, 'spin');
-  assert.equal(config.buttons[1].animation.duration, '3s', 'duration still inherited');
+  assert.equal(config.items[0].animation.type, 'breathe');
+  assert.equal(config.items[0].animation.duration, '3s');
+  assert.equal(config.items[1].animation.type, 'spin');
+  assert.equal(config.items[1].animation.duration, '3s', 'duration still inherited');
 });
 
 test('an unknown animation type degrades to none instead of throwing', () => {
   const config = normalizeConfig({ buttons: [{ animation: { type: 'explode' } }] });
-  assert.equal(config.buttons[0].animation.type, 'none');
+  assert.equal(config.items[0].animation.type, 'none');
 });
 
 test('a broken button does not take the card down', () => {
   const config = normalizeConfig({ buttons: [{ entity: 'light.a' }, 'not a mapping'] });
-  assert.equal(config.buttons.length, 2);
-  assert.ok(config.buttons[1].error);
+  assert.equal(config.items.length, 2);
+  assert.ok(config.items[1].error);
 });
 
 test('a card without buttons is reported, not silently empty', () => {
@@ -385,16 +385,16 @@ test('the inner arrangement is a choice, not a guess', () => {
     button: { layout: 'horizontal' },
     buttons: [{ name: 'a' }, { name: 'b', layout: 'vertical' }],
   });
-  assert.equal(config.buttons[0].layout, 'horizontal', 'card default applies');
-  assert.equal(config.buttons[1].layout, 'vertical', 'the button overrides it');
+  assert.equal(config.items[0].layout, 'horizontal', 'card default applies');
+  assert.equal(config.items[1].layout, 'vertical', 'the button overrides it');
 });
 
 test('it defaults to vertical, and auto is accepted as the old spelling', () => {
-  assert.equal(normalizeConfig({ buttons: [{}] }).buttons[0].layout, 'vertical');
+  assert.equal(normalizeConfig({ buttons: [{}] }).items[0].layout, 'vertical');
   // 'auto' used to mean "switch by yourself"; it now just means vertical, and
   // anything that is not 'horizontal' renders vertically.
   const legacy = normalizeConfig({ buttons: [{ layout: 'auto' }] });
-  assert.notEqual(legacy.buttons[0].layout, 'horizontal');
+  assert.notEqual(legacy.items[0].layout, 'horizontal');
 });
 
 /* -- mode and columns interacting ----------------------------------------- */

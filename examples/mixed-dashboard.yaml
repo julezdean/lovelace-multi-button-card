@@ -17,7 +17,7 @@ animation:
   duration: 3s
   intensity: 0.7
 
-buttons:
+items:
   # State-dependent icon, animation only while the light is on.
   - name: Wohnzimmer
     icon:

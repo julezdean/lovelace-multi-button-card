@@ -2,11 +2,11 @@
 #
 # Regenerates docs/images/*.png from the demo harness.
 #
-#   ./tools/screenshots.sh
+#   npm run screenshots        (builds first)
 #
-# The harness in tools/demo/ imports the real multi-button-card.js, so the
-# images always show the current code rather than a copy of it. Run this
-# whenever anything visible changes.
+# The harness in tools/demo/ imports the built dist/multi-button-card.js, so
+# the images always show the current code rather than a copy of it. Run this
+# whenever anything visible changes - through npm, so the bundle is fresh.
 #
 # The window sizes below are not arbitrary: each is the scene's measured body
 # height at that width, so the image has the same 24px margin all round. If you
@@ -28,6 +28,7 @@ OUT=docs/images
 SCALE=2   # retina-quality PNGs
 
 [ -x "$CHROME" ] || { echo "Google Chrome not found at $CHROME" >&2; exit 1; }
+[ -f dist/multi-button-card.js ] || { echo "No bundle in dist/ - run: npm run screenshots" >&2; exit 1; }
 
 mkdir -p "$OUT"
 

@@ -4,16 +4,16 @@
  * older button-level key for the tap. The editor shows it as a switch per
  * action but must store it on the action.
  */
-import test from 'node:test';
+import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import {
   normalizeConfig,
   actionToForm,
   actionFromForm,
   confirmationFromConfig,
-} from '../multi-button-card.js';
+} from '../src/main.ts';
 
-const only = (button) => normalizeConfig({ buttons: [button] }).buttons[0];
+const only = (button) => normalizeConfig({ buttons: [button] }).items[0];
 
 /* -- the card ------------------------------------------------------------- */
 

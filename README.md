@@ -2,7 +2,7 @@
 
 A multi-button control card for Home Assistant, built for wall-mounted dashboards.
 
-One file, no dependencies, no build step. The point of the card is that it looks
+One file to install, no dependencies. The point of the card is that it looks
 the same quality with three buttons as with twelve: the layout is computed from
 the button count and the measured width, so there are no empty grid cells, no
 orphan rows and no layout jumps.
@@ -26,6 +26,8 @@ orphan rows and no layout jumps.
   - [Card options](#card-options)
   - [`layout`](#layout)
   - [`appearance`](#appearance)
+  - [Items and types](#items-and-types)
+  - [`item` (the cell of every item)](#item-the-cell-of-every-item)
   - [`button` (defaults for all buttons)](#button-defaults-for-all-buttons)
   - [Per-button options](#per-button-options)
   - [Templates](#templates)
@@ -59,13 +61,15 @@ Adding it by hand instead:
 
 ### Manual
 
-1. Copy `multi-button-card.js` to `<config>/www/multi-button-card.js`
+1. Download `multi-button-card.js` from the
+   [latest release](https://github.com/julezdean/lovelace-multi-button-card/releases/latest)
+   and copy it to `<config>/www/multi-button-card.js`
 2. **Settings → Dashboards → three-dot menu → Resources → Add resource**
    - URL: `/local/multi-button-card.js`
    - Type: **JavaScript module**
 3. Reload the browser
 
-Confirm it loaded: the browser console prints `multi-button-card v1.8.0` on
+Confirm it loaded: the browser console prints `multi-button-card v1.9.0-beta.6` on
 startup.
 
 ---
@@ -74,7 +78,7 @@ startup.
 
 ```yaml
 type: custom:multi-button-card
-buttons:
+items:
   - name: Wohnzimmer
     icon: mdi:sofa
     entity: light.wohnzimmer
@@ -94,6 +98,9 @@ buttons:
 
 A button with an `entity` and no `tap_action` toggles that entity and opens
 more-info on hold. That is usually all you need.
+
+Configurations from before 1.9 call the list `buttons:`. That spelling keeps
+working; the visual editor writes `items:` the next time it saves.
 
 ---
 
@@ -145,7 +152,7 @@ capacity, even if the last one ends up half empty:
 
 ```yaml
 layout: { mode: grid, columns: 5 }
-buttons: [B1, B2 (colspan 2), B3, B4, B5]
+items: [B1, B2 (colspan 2), B3, B4, B5]
 ```
 
 ```
@@ -209,10 +216,11 @@ outline). Neither takes the rest of the card down.
 | Option | Type | Default | Description |
 |---|---|---|---|
 | `type` | string | — | `custom:multi-button-card` |
-| `title` | string | — | Optional heading above the buttons |
-| `buttons` | list | — | **Required**, at least one entry |
+| `title` | string | — | Optional heading above the items |
+| `items` | list | — | **Required**, at least one entry. `buttons` is the older spelling of the same list |
 | `layout` | map | see below | Layout engine settings |
 | `appearance` | map | see below | Card surface |
+| `item` | map | see below | The cell every item sits in, whatever its type |
 | `button` | map | see below | Defaults inherited by every button |
 | `animation` | map | see below | Default animation for every button |
 
@@ -250,22 +258,56 @@ want them to; left unset, they stay out of its way.
 | `padding` | number \| string | `14` | Inner padding — the card's own, no theme equivalent |
 | `shadow` | boolean | from the theme | `false` sets `--ha-card-box-shadow: none` |
 
+### Items and types
+
+Every entry of `items` has a `type`, which decides what the cell shows and which
+options it takes. An entry without `type` is a button:
+
+```yaml
+items:
+  - entity: light.kueche        # type: button
+  - type: button
+    entity: light.flur
+```
+
+| `type` | |
+|---|---|
+| `button` *(default)* | An icon, a name and an optional state line — everything described below |
+
+Some options belong to the item rather than to its type, and every type has
+them: `entity`, `colspan`, `visibility`, the three actions, `style`, and the
+cell options below. An entry with a type this version does not know is shown as
+a dashed cell with the reason in it; the rest of the card keeps working.
+
+### `item` (the cell of every item)
+
+Every item sits in the same cell, so a card mixing kinds of item still has one
+surface, one corner radius and one accent. These keys set that cell for all
+items. A type's own defaults block (`button:`) may set them too and wins over
+`item:`, and the item itself wins over both.
+
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `radius` | number \| string | `18` | Corner radius |
+| `background` | CSS colour | subtle overlay | Inactive background |
+| `active_background` | CSS colour | slightly brighter | Active background |
+| `active_color` | CSS colour | `--state-active-color` | Accent for icon and outline |
+| `label_size` | number \| string | derived from height | Fixed size of the name |
+| `press_effect` | `scale` \| `fade` \| `none` | `scale` | Touch feedback |
+
+Before 1.9 these lived in `button:`, where they still work. The visual editor
+moves them to `item:` the next time it saves the card options.
+
 ### `button` (defaults for all buttons)
 
 Every key here can also be set on an individual button, where it wins.
 
 | Option | Type | Default | Description |
 |---|---|---|---|
-| `radius` | number \| string | `18` | Button corner radius |
-| `background` | CSS colour | subtle overlay | Inactive background |
-| `active_background` | CSS colour | slightly brighter | Active background |
-| `active_color` | CSS colour | `--state-active-color` | Accent for icon and outline |
 | `icon_color` | CSS colour | secondary text | Inactive icon colour |
 | `icon_size` | number \| string | derived from height | Fixed icon size |
-| `label_size` | number \| string | derived from height | Fixed label size |
 | `show_name` | boolean | `true` | Show the name line |
 | `show_state` | boolean \| `auto` | `auto` | See below |
-| `press_effect` | `scale` \| `fade` \| `none` | `scale` | Touch feedback |
 | `layout` | `vertical` \| `horizontal` | `vertical` | Icon above or beside the text |
 
 **`show_state: auto`** shows the state only for domains whose state carries a
@@ -311,7 +353,7 @@ Presentation fields can carry JavaScript, in the `[[[ ... ]]]` form that
 `custom:button-card` established:
 
 ```yaml
-buttons:
+items:
   - entity: binary_sensor.alle_fenster
     name: Fenster
     label: |
@@ -419,7 +461,7 @@ condition grammar — the same one `visibility:` uses in sections and the
 conditional card:
 
 ```yaml
-buttons:
+items:
   - name: Waschmaschine
     icon: mdi:washing-machine
     entity: binary_sensor.waschmaschine
@@ -595,7 +637,7 @@ animation:
   type: breathe
   duration: 3s
 
-buttons:
+items:
   - entity: binary_sensor.waschmaschine
     animation:
       type: pulse        # duration stays 3s
@@ -608,10 +650,11 @@ Animations are pure CSS and honour `prefers-reduced-motion: reduce`.
 ## The visual editor
 
 The card ships an editor, so it can be configured by clicking rather than by
-writing YAML. Card options - layout, appearance, button defaults, animation -
-are collapsible sections. The buttons are a list below them: click one to open
-its own page with entity, icon, name, width, the three actions and its
-animation; add, delete and reorder from the list.
+writing YAML. Card options - layout, appearance, item and button defaults,
+animation - are collapsible sections. The items are a list below them: click
+one to open its own page with the options its type has - for a button entity,
+icon, name, width, the three actions and its animation. **+ Add item** adds
+one, and the list reorders and deletes them.
 
 Anything left at its default is not written to the config, so opening the
 editor on a three-line YAML card does not turn it into fifty lines.
@@ -668,22 +711,33 @@ light and dark themes both work. Every `color-mix()` has a plain `rgba()`
 fallback in front of it for the older webviews found on wall tablets.
 
 **Errors.** A misconfigured button shows a dashed outline; the rest of the card
-keeps working. A card without `buttons` shows a readable error instead of a
-blank space.
+keeps working, and so does an item of a type the card does not know. A card
+without `items` shows a readable error instead of a blank space.
 
 ---
 
 ## Development
 
+The card is written in TypeScript under `src/` and bundled into the single
+file Home Assistant loads. That file is built, not committed: a release
+attaches it as an asset, which is where HACS looks first.
+
 ```bash
-npm test                 # layout engine, config normalisation, animation conditions
-./tools/screenshots.sh   # regenerate docs/images/ from the demo harness
+npm install
+npm run build            # dist/multi-button-card.js
+npm run check            # formatting, lint, types, build, tests - what CI runs
+npm run screenshots      # build, then regenerate docs/images/ from the demo harness
 ```
 
-`tools/demo/` is a harness that imports the real `multi-button-card.js` with a
-mock `hass` object and stubs for `<ha-icon>`, `<ha-state-icon>` and `<ha-form>`,
-so the images in this README always show the current code. Serve the repo root
-and open `tools/demo/index.html?scene=overview`.
+`src/main.ts` describes the layout of the source. The card owns the grid and
+the cell each item sits in; each item type under `src/items/` owns what is
+inside its cell, its options and its page in the editor.
+
+`tools/demo/` is a harness that imports the built `dist/multi-button-card.js`
+with a mock `hass` object and stubs for `<ha-icon>`, `<ha-state-icon>` and
+`<ha-form>`, so the images in this README always show the current code. Run
+`npm run build`, serve the repo root and open
+`tools/demo/index.html?scene=overview`.
 
 Scenes: `overview`, `counts`, `portrait`, `landscape`, `inner` (icon above vs. beside the
 text), `theme` and `opaque`

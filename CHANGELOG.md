@@ -6,6 +6,37 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [1.9.0-beta.6] - 2026-09-30
+
+The groundwork for other kinds of item than buttons. Nothing looks or behaves
+differently: every screenshot renders pixel for pixel as in 1.8.0.
+
+### Added
+
+- `items:` is the name of the list now, and every entry can carry a `type`.
+  An entry without one is a `button`, which is the only type so far. An entry
+  with a type the card does not know shows as a dashed cell with the reason,
+  instead of taking the card down.
+- `item:` sets the cell every item sits in - corner radius, background,
+  active background, accent colour, name size and press effect - for all
+  items at once, whatever their type. `button:` and the item itself still
+  override it.
+
+### Changed
+
+- The visual editor lists **Items** and adds them with **+ Add item**. It
+  writes `items:` instead of `buttons:`, and moves cell options from
+  `button:` to `item:` when it saves the card options.
+- The card is now written in TypeScript and built into the single file Home
+  Assistant loads. That file is no longer in the repository; each release
+  carries it as an asset, which is where HACS takes it from. Manual installs
+  download it from the release page.
+
+### Deprecated
+
+- `buttons:` is the older spelling of `items:`, and cell options under
+  `button:` are the older place for `item:`. Both keep working.
+
 ## [1.8.0] - 2026-09-29
 
 ### Added

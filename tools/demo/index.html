@@ -253,7 +253,7 @@
 </div>
 
 <script type="module">
-import '../../multi-button-card.js';   // the real card, not a copy
+import '../../dist/multi-button-card.js';   // the real, built card - not a copy
 import { ICONS } from './icons.js';
 
 /* ------------------------------------------------------------------ *
@@ -1038,7 +1038,7 @@ const SCENES = {
     probe.hass = hass;
     document.body.appendChild(probe);
     let kept = null;
-    probe.addEventListener('config-changed', (e) => { kept = e.detail.config.buttons[0]; });
+    probe.addEventListener('config-changed', (e) => { kept = e.detail.config.items[0]; });
     requestAnimationFrame(() => {
       probe.shadowRoot.querySelector('.row-label').click();
       const nameInput = probe.shadowRoot.querySelector('label[data-path="name"] input');
@@ -1101,7 +1101,7 @@ const SCENES = {
           results.push('yaml editor: NOT mounted');
         } else {
           let last = null;
-          sub.addEventListener('config-changed', (e) => { last = e.detail.config.buttons[0]; });
+          sub.addEventListener('config-changed', (e) => { last = e.detail.config.items[0]; });
 
           area.value = JSON.stringify({ name: 'Aus YAML', entity: 'light.bad', icon: 'mdi:shower' });
           area.dispatchEvent(new Event('input', { bubbles: true }));

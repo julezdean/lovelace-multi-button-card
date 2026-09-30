@@ -1,9 +1,9 @@
 name: Release
 
 # Runs after `gh release create`, which is the last step of the release flow.
-# There is no build, so the card is already in the tag -- this verifies that
-# what the tag carries actually says what the tag claims, and attaches the file
-# so HACS finds it as a release asset (hacs/integration, repositories/plugin.py).
+# The built card is not committed, so without this a release would carry no
+# asset -- and HACS looks at the release assets first (hacs/integration,
+# repositories/plugin.py).
 on:
   release:
     types: [published]
@@ -12,7 +12,7 @@ permissions:
   contents: write
 
 jobs:
-  verify-and-attach:
+  build-and-attach:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -39,25 +39,25 @@ jobs:
           fi
           echo "Version $pkg_version"
 
-      - run: npm test
+      - run: npm run check
 
-      # Proves the version reached the card itself, not just the manifest: the
-      # card logs it at load time and that string is how anyone diagnoses which
-      # copy a browser is actually running.
-      - name: The version must be inside the card
+      # Proves the version reached the artefact, not just the manifest: the
+      # card logs it at load time and that string is how anyone diagnoses
+      # which build a browser is actually running.
+      - name: The version must be inside the bundle
         run: |
           pkg_version="$(node -p "require('./package.json').version")"
-          card="$(node -p "require('./package.json').main")"
-          if ! grep -q "CARD_VERSION = '$pkg_version'" "$card"; then
-            echo "::error::$card does not declare CARD_VERSION $pkg_version."
+          bundle="$(node -p "require('./hacs.json').filename")"
+          if ! grep -q "\"$pkg_version\"" "dist/$bundle"; then
+            echo "::error::dist/$bundle does not contain $pkg_version."
             exit 1
           fi
-          echo "$card carries $pkg_version"
+          echo "dist/$bundle carries $pkg_version"
 
-      - name: Attach the card to the release
+      - name: Attach the bundle to the release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          card="$(node -p "require('./package.json').main")"
+          bundle="$(node -p "require('./hacs.json').filename")"
           gh release upload "${{ github.event.release.tag_name }}" \
-            "$card" --clobber
+            "dist/$bundle" --clobber

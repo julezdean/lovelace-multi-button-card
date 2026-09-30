@@ -24,8 +24,19 @@ jobs:
 
       - run: npm ci
 
-      # Tests plus the version and identity checks -- the same command used
+      # Formatting, lint, types, the build and the tests -- the same command used
       # locally, so a green CI means the same thing as a green working copy.
-      # Every test file imports the card, so a file that stops parsing fails
-      # here too; it needs no separate step.
-      - run: npm test
+      - run: npm run check
+
+      # HACS ships exactly one file, and Home Assistant loads exactly one
+      # resource. A second chunk would never be deployed.
+      - name: The bundle must be a single file
+        run: |
+          count=$(find dist -type f -name '*.js' | wc -l | tr -d ' ')
+          if [ "$count" -ne 1 ]; then
+            echo "::error::Expected exactly one bundle in dist/, found $count."
+            find dist -type f
+            exit 1
+          fi
+          echo "Bundle: $(find dist -type f -name '*.js') ($(wc -c < "$(find dist -type f -name '*.js')") bytes)"
+

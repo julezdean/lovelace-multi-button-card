@@ -2,9 +2,9 @@
  * Visibility uses Home Assistant's own condition grammar, so these tests are
  * mostly about matching HA's semantics rather than inventing any.
  */
-import test from 'node:test';
+import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import { isVisible, conditionMet, collectMediaQueries, normalizeConfig } from '../multi-button-card.js';
+import { isVisible, conditionMet, collectMediaQueries, normalizeConfig } from '../src/main.ts';
 
 const hass = {
   user: { id: 'user-a' },
@@ -113,20 +113,20 @@ test('without hass nothing is hidden yet', () => {
 test('visibility and conditions are both accepted', () => {
   const a = normalizeConfig({ buttons: [{ visibility: [{ condition: 'state', entity: 'light.on', state: 'on' }] }] });
   const b = normalizeConfig({ buttons: [{ conditions: [{ condition: 'state', entity: 'light.on', state: 'on' }] }] });
-  assert.deepEqual(a.buttons[0].visibility, b.buttons[0].visibility);
-  assert.equal(a.buttons[0].visibility.length, 1);
+  assert.deepEqual(a.items[0].visibility, b.items[0].visibility);
+  assert.equal(a.items[0].visibility.length, 1);
 });
 
 test('a single condition may be written without a list', () => {
   const config = normalizeConfig({
     buttons: [{ visibility: { condition: 'state', entity: 'light.on', state: 'on' } }],
   });
-  assert.equal(config.buttons[0].visibility.length, 1);
+  assert.equal(config.items[0].visibility.length, 1);
 });
 
 test('a button without conditions gets an empty list, not undefined', () => {
   const config = normalizeConfig({ buttons: [{ name: 'x' }] });
-  assert.deepEqual(config.buttons[0].visibility, []);
+  assert.deepEqual(config.items[0].visibility, []);
 });
 
 test('media queries are collected from nested conditions', () => {

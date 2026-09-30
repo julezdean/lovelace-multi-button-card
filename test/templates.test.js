@@ -3,9 +3,9 @@
  * around that: what a template can see, what happens when one throws, and that
  * a field without one is left completely alone.
  */
-import test from 'node:test';
+import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import { renderTemplate, hasTemplate, templateContext, normalizeConfig } from '../multi-button-card.js';
+import { renderTemplate, hasTemplate, templateContext, normalizeConfig } from '../src/main.ts';
 
 const hass = {
   states: {
@@ -74,22 +74,22 @@ test('a template without a return yields undefined, not a crash', () => {
 
 test('a button is flagged as templated only when it actually is', () => {
   const plain = normalizeConfig({ buttons: [{ name: 'a', label: 'b' }] });
-  assert.equal(plain.buttons[0].hasTemplates, false);
+  assert.equal(plain.items[0].hasTemplates, false);
 
   const templated = normalizeConfig({ buttons: [{ name: '[[[ return 1 ]]]' }] });
-  assert.equal(templated.buttons[0].hasTemplates, true);
+  assert.equal(templated.items[0].hasTemplates, true);
 });
 
 test('a template inside a state-keyed icon map is detected', () => {
   const config = normalizeConfig({
     buttons: [{ icon: { on: '[[[ return "mdi:a" ]]]', off: 'mdi:b' } }],
   });
-  assert.equal(config.buttons[0].hasTemplates, true);
+  assert.equal(config.items[0].hasTemplates, true);
 });
 
 test('a template in style counts as templated', () => {
   const config = normalizeConfig({ buttons: [{ style: '[[[ return "opacity: 0.5" ]]]' }] });
-  assert.equal(config.buttons[0].hasTemplates, true);
+  assert.equal(config.items[0].hasTemplates, true);
 });
 
 test('entity and colspan are not template fields', () => {
@@ -98,7 +98,7 @@ test('entity and colspan are not template fields', () => {
   const config = normalizeConfig({
     buttons: [{ entity: '[[[ return "light.a" ]]]', colspan: 1 }],
   });
-  assert.equal(config.buttons[0].hasTemplates, false);
+  assert.equal(config.items[0].hasTemplates, false);
 });
 
 test('an entity-less button gets an undefined entity, not an error', () => {

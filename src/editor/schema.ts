@@ -1,0 +1,122 @@
+import { VALID_ANIMATIONS } from '../core/animation';
+
+/**
+ * Pieces of ha-form schema that more than one page uses. ha-form renders from
+ * a declarative schema; these are plain objects in its format.
+ */
+
+export const ACTION_TYPES = [
+  'more-info',
+  'toggle',
+  'perform-action',
+  'navigate',
+  'url',
+  'assist',
+  'none',
+];
+
+export const select = (
+  name: string,
+  options: Array<{ value: string; label: string }>,
+  mode = 'dropdown',
+) => ({
+  name,
+  selector: { select: { mode, options } },
+});
+
+export const ANIMATION_SCHEMA = [
+  select(
+    'type',
+    [...VALID_ANIMATIONS].map((value) => ({ value, label: value })),
+  ),
+  {
+    name: 'when',
+    selector: {
+      select: {
+        custom_value: true,
+        mode: 'dropdown',
+        options: [
+          { value: 'active', label: 'Entity is active' },
+          { value: 'inactive', label: 'Entity is inactive' },
+          { value: 'always', label: 'Always' },
+          { value: 'never', label: 'Never' },
+        ],
+      },
+    },
+  },
+  { name: 'duration', selector: { text: {} } },
+  { name: 'intensity', selector: { number: { min: 0, max: 3, step: 0.1, mode: 'slider' } } },
+];
+
+/** Tap, hold and double tap, each with its confirmation switch. */
+export const ACTIONS_SECTION = {
+  type: 'expandable',
+  name: '',
+  title: 'Actions',
+  icon: 'mdi:gesture-tap',
+  schema: [
+    { name: 'tap_action', selector: { ui_action: { actions: ACTION_TYPES } } },
+    { name: 'confirm_tap', selector: { boolean: {} } },
+    { name: 'hold_action', selector: { ui_action: { actions: ACTION_TYPES } } },
+    { name: 'confirm_hold', selector: { boolean: {} } },
+    { name: 'double_tap_action', selector: { ui_action: { actions: ACTION_TYPES } } },
+    { name: 'confirm_double_tap', selector: { boolean: {} } },
+  ],
+};
+
+export const LAYOUT_SELECT = select('layout', [
+  { value: 'vertical', label: 'Icon above the text' },
+  { value: 'horizontal', label: 'Icon beside the text' },
+]);
+
+export const PRESS_EFFECT_SELECT = select('press_effect', [
+  { value: 'scale', label: 'Scale' },
+  { value: 'fade', label: 'Brighten' },
+  { value: 'none', label: 'None' },
+]);
+
+/** Labels, so the form does not show raw config keys. */
+export const LABELS: Record<string, string> = {
+  title: 'Title',
+  mode: 'Mode',
+  columns: 'Columns',
+  gap: 'Gap between items',
+  column_width: 'Target column width',
+  max_columns: 'Maximum columns (automatic mode)',
+  min_button_size: 'Minimum item height',
+  max_button_size: 'Maximum item height',
+  appearance: 'Card appearance',
+  background: 'Background',
+  active_background: 'Background when active',
+  style: 'Extra CSS',
+  radius: 'Corner radius',
+  padding: 'Padding',
+  shadow: 'Shadow',
+  item: 'Item defaults',
+  button: 'Button defaults',
+  active_color: 'Accent colour',
+  icon_color: 'Icon colour',
+  icon_size: 'Icon size (px)',
+  label_size: 'Label size (px)',
+  show_name: 'Show name',
+  show_state: 'Show state',
+  press_effect: 'Press effect',
+  layout: 'Icon and text',
+  animation: 'Animation',
+  type: 'Type',
+  duration: 'Duration',
+  intensity: 'Intensity',
+  when: 'Run when',
+  entity: 'Entity',
+  name: 'Name',
+  icon: 'Icon',
+  label: 'Label',
+  colspan: 'Width in slots',
+  confirm_tap: 'Confirm tap',
+  confirm_hold: 'Confirm hold',
+  confirm_double_tap: 'Confirm double tap',
+  state_display: 'State text',
+  tap_action: 'Tap',
+  hold_action: 'Hold',
+  double_tap_action: 'Double tap',
+};

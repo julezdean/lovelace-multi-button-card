@@ -1,36 +1,35 @@
 /**
- * A single-file card has no build step, so the version lives in two places:
- * CARD_VERSION in the card itself (which is what the browser console reports
- * and therefore how anyone diagnoses which copy is loaded) and "version" in
- * package.json (which is what the release tag is checked against).
+ * The version lives in package.json and reaches the card through the build.
+ * What the browser console reports is how anyone diagnoses which copy is
+ * loaded, so the chain package.json -> CARD_VERSION -> bundle must hold.
  *
- * They must agree. A tag is spent once pushed, so this has to fail here rather
- * than after someone installs a card that lies about its version.
+ * A tag is spent once pushed, so this has to fail here rather than after
+ * someone installs a card that lies about its version.
  */
-import test from 'node:test';
+import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { CARD_VERSION, CARD_TAG, REPO_URL } from '../multi-button-card.js';
+import { existsSync, readFileSync } from 'node:fs';
+import { CARD_VERSION, CARD_TAG, REPO_URL } from '../src/main.ts';
+import { BUNDLE } from '../vite.config.ts';
 
-const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
+const read = (path) => readFileSync(new URL(path, import.meta.url), 'utf8');
+const pkg = JSON.parse(read('../package.json'));
 
-test('CARD_VERSION and package.json agree', () => {
-  assert.equal(
-    CARD_VERSION,
-    pkg.version,
-    `card says ${CARD_VERSION}, package.json says ${pkg.version}`,
-  );
+test('CARD_VERSION is the version in package.json', () => {
+  assert.equal(CARD_VERSION, pkg.version, `card says ${CARD_VERSION}, package.json says ${pkg.version}`);
 });
 
-test('the card tag matches the file it ships as', () => {
-  assert.equal(pkg.main, `${CARD_TAG}.js`);
-  assert.deepEqual(pkg.files, [`${CARD_TAG}.js`]);
+test('the bundle is named after the card tag, and hacs.json points at it', () => {
+  assert.equal(BUNDLE, `${CARD_TAG}.js`);
+  const hacs = JSON.parse(read('../hacs.json'));
+  assert.equal(hacs.filename, BUNDLE);
 });
 
-test('hacs.json points at the file that actually exists', () => {
-  const hacs = JSON.parse(readFileSync(new URL('../hacs.json', import.meta.url), 'utf8'));
-  assert.equal(hacs.filename, `${CARD_TAG}.js`);
-  readFileSync(new URL(`../${hacs.filename}`, import.meta.url)); // throws if missing
+// Only meaningful after a build. `npm run check` builds before it tests, so
+// there it always runs - against the bundle just built, never a stale one.
+test('a built bundle carries the version', { skip: !existsSync(new URL(`../dist/${BUNDLE}`, import.meta.url)) }, () => {
+  const bundle = read(`../dist/${BUNDLE}`);
+  assert.ok(bundle.includes(`"${pkg.version}"`), `dist/${BUNDLE} does not contain ${pkg.version}`);
 });
 
 test('the repository URL is consistent across the card and package.json', () => {
@@ -40,7 +39,7 @@ test('the repository URL is consistent across the card and package.json', () => 
 });
 
 test('the README documents the version the card reports', () => {
-  const readme = readFileSync(new URL('../README.md', import.meta.url), 'utf8');
+  const readme = read('../README.md');
   assert.ok(
     readme.includes(`v${CARD_VERSION}`),
     `README does not mention v${CARD_VERSION} - the install check is stale`,

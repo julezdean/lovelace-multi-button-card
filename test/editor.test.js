@@ -6,7 +6,7 @@
  * How the form LOOKS is Home Assistant's business and cannot be checked here;
  * tools/demo/ drives the editor against a stub to cover the wiring.
  */
-import test from 'node:test';
+import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import {
   pruneDefaults,
@@ -15,7 +15,7 @@ import {
   mergeOwnedKeys,
   CARD_FORM_KEYS,
   BUTTON_FORM_KEYS,
-} from '../multi-button-card.js';
+} from '../src/main.ts';
 
 /* -- pruning -------------------------------------------------------------- */
 
@@ -72,19 +72,19 @@ const EDITED = {
 
 test('the card accepts what the editor writes', () => {
   const config = normalizeConfig(EDITED);
-  assert.equal(config.buttons.length, 2);
+  assert.equal(config.items.length, 2);
   assert.equal(config.layout.gap, 20);
   assert.equal(config.layout.mode, 'auto', 'untouched options keep their default');
-  assert.equal(config.buttons[1].weight, 2);
-  assert.equal(config.buttons[1].animation.type, 'pulse');
-  config.buttons.forEach((button) => assert.equal(button.error, null));
+  assert.equal(config.items[1].weight, 2);
+  assert.equal(config.items[1].animation.type, 'pulse');
+  config.items.forEach((button) => assert.equal(button.error, null));
 });
 
 test('a button the editor just added is valid on its own', () => {
   // _addButton() writes exactly this and nothing else.
   const config = normalizeConfig({ buttons: [{ name: 'Button 1' }] });
-  assert.equal(config.buttons[0].error, null);
-  assert.equal(config.buttons[0].tap_action.action, 'none', 'no entity yet, so no action');
+  assert.equal(config.items[0].error, null);
+  assert.equal(config.items[0].tap_action.action, 'none', 'no entity yet, so no action');
 });
 
 test('show_state survives the round trip through the select control', () => {
@@ -95,7 +95,7 @@ test('show_state survives the round trip through the select control', () => {
     ['auto', 'auto'],
   ]) {
     const config = normalizeConfig({ buttons: [{ entity: 'light.a', show_state: stored }] });
-    assert.equal(config.buttons[0].show_state, stored, `form value ${form}`);
+    assert.equal(config.items[0].show_state, stored, `form value ${form}`);
   }
 });
 
@@ -105,7 +105,7 @@ test('an action edited to none is kept, not pruned back to a default', () => {
   const config = normalizeConfig({
     buttons: [{ entity: 'light.a', hold_action: { action: 'none' } }],
   });
-  assert.equal(config.buttons[0].hold_action.action, 'none');
+  assert.equal(config.items[0].hold_action.action, 'none');
 });
 
 /* -- the editor must not drop what it does not know ----------------------- */
