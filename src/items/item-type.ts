@@ -26,6 +26,8 @@ export interface SyncContext {
   geometry: CellGeometry;
   /** The moment this sync is for. */
   now: number;
+  /** What the type's own subscription last delivered, if it has one. */
+  data: unknown;
 }
 
 /** The measured geometry a layout pass hands to every cell. */
@@ -39,6 +41,8 @@ export interface CellGeometry {
   visualSize: number;
   columns: number;
   gap: number;
+  iconSize: number;
+  labelSize: number;
 }
 
 export interface NormalizeContext {
@@ -95,6 +99,14 @@ export interface ItemType<
   tickOf?(view: V): number | null;
   /** Draws something taller than an icon, for which its row reserves room. */
   tallVisual?: boolean;
+  /** When (epoch ms) the view changes by itself next, for changes slower than a tick. */
+  refreshOf?(view: V): number | null;
+  /**
+   * Data from outside the state machine - a graph's history. Called once per
+   * config while the card is connected; `onData` hands over what arrived, and
+   * the returned function stops it.
+   */
+  subscribe?(item: I, hass: HomeAssistant, onData: (data: unknown) => void): () => void;
 
   view(item: I, context: SyncContext): V;
   paint(parts: P, item: I, view: V, context: SyncContext): void;

@@ -6,6 +6,32 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [1.9.0-beta.8] - 2026-09-30
+
+A sensor's history as an item type, modelled on mini-graph-card.
+
+### Added
+
+- `graph`: the last hours of a sensor, full-bleed along the bottom of the
+  cell. `graph_layout: split` puts the text on top, as a horizontal button
+  has it; `background` keeps a button's arrangement with the graph behind
+  it, muted, and the text on a halo. `graph_height` sets the share of the
+  cell, 50 % by default.
+- The options of mini-graph-card that make sense in a cell: `hours_to_show`,
+  `points_per_hour`, `aggregate_func` (with the same `delta` and `diff`),
+  `line` or `bar`, `fill` (`fade` by default), `smoothing`, `line_width`,
+  hard and soft (`~`) bounds, `min_bound_range`, `logarithmic`, `attribute`
+  with dotted paths, `state_map`, `value_factor`, and thresholds as
+  `colors.thresholds` or `color_thresholds`, blended or hard.
+- More lines under `lines:`, coloured from the theme's palette unless given
+  a colour.
+- `label` for graphs knows `{{min}}`, `{{max}}` and `{{avg}}` of what is
+  drawn, shown in the entity's own precision.
+- The history comes from `history/stream`, as Home Assistant's own history
+  graphs do: once, then live, and again after a reconnect - without a cache
+  in the browser. The graph redraws when a bucket is full, not every second.
+- A graph never counts as active, so a wall of temperatures does not light up.
+
 ## [1.9.0-beta.7] - 2026-09-30
 
 Four new item types that draw a proportion - a timer running down, the time a

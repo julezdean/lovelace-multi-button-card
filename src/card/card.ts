@@ -118,6 +118,12 @@ export class MultiButtonCard extends BaseElement {
   private _flashUntil: number[] = [];
   private _flashTimers: Array<number | null> = [];
 
+  /** Per item, what its type's subscription delivered, and how to stop it. */
+  private _data: unknown[] = [];
+  private _subscriptions: Array<() => void> = [];
+  /** Per item, a timer for a view that changes by itself, slower than a tick. */
+  private _refreshTimers = new Map<number, { at: number; timer: number }>();
+
   /** Items subscribed to the shared clock, by index. */
   private _ticks = new Map<number, { phase: number; stop: () => void }>();
   /** The last layout pass's measurements, which some types draw with. */
@@ -128,6 +134,8 @@ export class MultiButtonCard extends BaseElement {
     visualSize: 0,
     columns: 1,
     gap: 0,
+    iconSize: 30,
+    labelSize: 14,
   };
 
   constructor() {
@@ -164,6 +172,7 @@ export class MultiButtonCard extends BaseElement {
     this._signatures = [];
     this._clearFlashes();
     this._clearTicks();
+    this._unsubscribe();
     this._lastWidth = 0;
     this._lastColumns = 0;
     this._build();
@@ -171,6 +180,7 @@ export class MultiButtonCard extends BaseElement {
 
   set hass(hass: HomeAssistant) {
     this._hass = hass;
+    this._subscribe();
     this._sync();
   }
 
@@ -254,7 +264,9 @@ export class MultiButtonCard extends BaseElement {
     if (this._resizeObserver) this._resizeObserver.observe(this);
     // First measurement before the observer's initial callback arrives.
     this._onWidth(this.clientWidth);
-    // Ticks stop while disconnected; a card moved in the DOM starts them again.
+    // Ticks and subscriptions stop while disconnected; a card moved in the
+    // DOM starts them again.
+    this._subscribe();
     if (this._hass) this._sync(true);
   }
 
@@ -264,6 +276,7 @@ export class MultiButtonCard extends BaseElement {
     this._clearArmed();
     this._clearFlashes();
     this._clearTicks();
+    this._unsubscribe();
     this._gestures.forEach((gesture) => this._cancelGesture(gesture));
     this._gestures.clear();
   }
@@ -325,6 +338,7 @@ export class MultiButtonCard extends BaseElement {
 
     this._lastColumns = 0; // force a layout pass
     this._applyLayout(this._lastWidth || this.clientWidth);
+    this._subscribe();
     this._sync(true);
   }
 
@@ -519,6 +533,8 @@ export class MultiButtonCard extends BaseElement {
       visualSize,
       columns,
       gap,
+      iconSize,
+      labelSize,
     };
     this._cells.forEach((cell, index) => {
       const item = items[index];
@@ -608,10 +624,12 @@ export class MultiButtonCard extends BaseElement {
       resolve,
       geometry: this._geometry,
       now: Date.now(),
+      data: this._data[index],
     };
     const view = itemType ? itemType.view(item, sync) : null;
     if (itemType && itemType.activeOf) sync.active = itemType.activeOf(view) || flashing;
     this._setTick(index, itemType && itemType.tickOf ? itemType.tickOf(view) : null);
+    this._setRefresh(index, itemType && itemType.refreshOf ? itemType.refreshOf(view) : null);
 
     const signature = [
       sync.active ? 1 : 0,
@@ -655,6 +673,51 @@ export class MultiButtonCard extends BaseElement {
   private _clearTicks(): void {
     this._ticks.forEach(({ stop }) => stop());
     this._ticks.clear();
+    this._refreshTimers.forEach(({ timer }) => window.clearTimeout(timer));
+    this._refreshTimers.clear();
+  }
+
+  private _setRefresh(index: number, at: number | null): void {
+    const current = this._refreshTimers.get(index);
+    if (current && current.at === at) return;
+    if (current) {
+      window.clearTimeout(current.timer);
+      this._refreshTimers.delete(index);
+    }
+    if (at === null || !this.isConnected) return;
+    const timer = window.setTimeout(
+      () => {
+        this._refreshTimers.delete(index);
+        this._syncItem(index);
+      },
+      Math.max(1000, at - Date.now()),
+    );
+    this._refreshTimers.set(index, { at, timer });
+  }
+
+  /**
+   * Starts the subscriptions of the types that have one, once per config and
+   * connection. hass is reassigned on every state change; the subscriptions
+   * are not renewed with it.
+   */
+  private _subscribe(): void {
+    const config = this._config;
+    const hass = this._hass;
+    if (!config || !hass || !this.isConnected || this._subscriptions.length) return;
+    this._subscriptions = config.items.map((item, index) => {
+      const itemType = this._cells[index]?.itemType;
+      if (!itemType || !itemType.subscribe || item.error) return () => undefined;
+      return itemType.subscribe(item, hass, (data) => {
+        this._data[index] = data;
+        this._syncItem(index);
+      });
+    });
+  }
+
+  private _unsubscribe(): void {
+    this._subscriptions.forEach((stop) => stop());
+    this._subscriptions = [];
+    this._data = [];
   }
 
   /**

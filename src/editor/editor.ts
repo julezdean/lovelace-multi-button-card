@@ -134,6 +134,7 @@ const SHARED_KEYS = [
   'active_color',
   'label_size',
   'press_effect',
+  'attribute',
 ];
 
 function typeOf(item: Dict): ItemType | undefined {

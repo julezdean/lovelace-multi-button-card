@@ -21,6 +21,23 @@
     --divider-color: rgba(225, 225, 225, 0.12);
     --ha-card-border-color: rgba(225, 225, 225, 0.12);
     --ha-card-border-radius: 16px;
+    /* Home Assistant's named colours, which `color: amber` and the graph
+       palette resolve to. Values from the frontend's default theme. */
+    --red-color: #f44336;
+    --pink-color: #e91e63;
+    --purple-color: #926bc7;
+    --indigo-color: #3f51b5;
+    --blue-color: #2196f3;
+    --light-blue-color: #03a9f4;
+    --cyan-color: #00bcd4;
+    --teal-color: #009688;
+    --green-color: #4caf50;
+    --light-green-color: #8bc34a;
+    --lime-color: #cddc39;
+    --yellow-color: #ffeb3b;
+    --amber-color: #ffc107;
+    --orange-color: #ff9800;
+    --deep-orange-color: #ff6f22;
   }
   html, body {
     margin: 0;
@@ -253,6 +270,14 @@
     <div class="col" style="width: 480px"><p class="caption">Section column, 480 px</p><div id="progress-host"></div></div>
     <div class="col" style="width: 360px"><p class="caption">Narrow column, 360 px</p><div id="progress-narrow"></div></div>
     <div class="col" style="width: 340px"><p class="caption">Smallest cells, 3 columns</p><div id="progress-small"></div></div>
+  </div>
+</div>
+
+<!-- Scene: graphs, both arrangements, next to a button -->
+<div class="scene" id="scene-graph">
+  <div class="strip">
+    <div class="col" style="width: 480px"><p class="caption">graph_layout: split</p><div id="graph-split"></div></div>
+    <div class="col" style="width: 480px"><p class="caption">graph_layout: background</p><div id="graph-background"></div></div>
   </div>
 </div>
 
@@ -521,6 +546,15 @@ const entity = (id, state, attributes = {}, extra = {}) => [id, { entity_id: id,
 const NOW = new Date(2026, 8, 30, 18, 25, 0).getTime();
 const iso = (ms) => new Date(ms).toISOString();
 
+/** Shapes over 0..1 of the window, one per entity with a history. */
+const HISTORY_CURVES = {
+  'sensor.wohnzimmer_temperatur': (x) => 20.2 + 1.4 * Math.sin(x * Math.PI * 2 - 1.2) + 0.25 * Math.sin(x * 37),
+  'sensor.aussen_temperatur': (x) => 7.8 + 4.2 * Math.sin(x * Math.PI * 2 - 1.8) + 0.4 * Math.sin(x * 23),
+  'sensor.flur_temperatur': (x) => 19.1 + 0.8 * Math.sin(x * Math.PI * 2 - 0.9),
+  'sensor.luftfeuchte': (x) => 48 + 7 * Math.sin(x * Math.PI * 3 + 0.4) + 1.5 * Math.sin(x * 41),
+  'sensor.leistung': (x) => Math.max(0, 180 + 900 * Math.max(0, Math.sin(x * Math.PI * 5)) ** 3 + 40 * Math.sin(x * 60)),
+};
+
 const hass = {
   states: Object.fromEntries([
     entity('light.wohnzimmer', 'on', { friendly_name: 'Wohnzimmer' }),
@@ -534,6 +568,8 @@ const hass = {
     entity('sensor.wohnzimmer_temperatur', '21.4', { friendly_name: 'Wohnzimmer', unit_of_measurement: '°C' }),
     entity('sensor.aussen_temperatur', '7.8', { friendly_name: 'Außen', unit_of_measurement: '°C' }),
     entity('sensor.luftfeuchte', '46', { friendly_name: 'Luftfeuchte', unit_of_measurement: '%' }),
+    entity('sensor.flur_temperatur', '19.4', { friendly_name: 'Flur', unit_of_measurement: '°C' }),
+    entity('sensor.leistung', '212', { friendly_name: 'Leistung', unit_of_measurement: 'W' }),
     entity('binary_sensor.waschmaschine', 'on', { friendly_name: 'Waschmaschine' }),
     entity('binary_sensor.fenster', 'on', { friendly_name: 'Fenster', anzahl_offen: 3, anzahl_nicht_verfuegbar: 1 }),
     entity('cover.rolladen_wohnzimmer', 'open', { friendly_name: 'Rolladen', current_position: 80 }),
@@ -561,6 +597,30 @@ const hass = {
       friendly_name: 'Backofen', device_class: 'timestamp',
     }),
   ]),
+  /*
+   * history/stream, as Home Assistant answers it: the window's history in one
+   * message. The curves are computed, not random, so the image is the same
+   * on every run.
+   */
+  connection: {
+    subscribeMessage(callback, message) {
+      if (message.type !== 'history/stream') return Promise.reject(new Error('not mocked'));
+      const start = Date.parse(message.start_time);
+      const end = Date.now();
+      const states = {};
+      for (const id of message.entity_ids) {
+        const curve = HISTORY_CURVES[id];
+        if (!curve) continue;
+        const list = [];
+        for (let t = start; t <= end; t += 10 * 60_000) {
+          list.push({ s: String(Math.round(curve((t - start) / (end - start)) * 10) / 10), lu: t / 1000 });
+        }
+        states[id] = list;
+      }
+      setTimeout(() => callback({ states, start_time: start / 1000 }), 0);
+      return Promise.resolve(() => Promise.resolve());
+    },
+  },
   language: 'de',
   locale: { language: 'de', time_format: '24' },
   callService: (...args) => console.log('callService', ...args),
@@ -584,6 +644,13 @@ function card(config, host) {
   const el = document.createElement('multi-button-card');
   el.setConfig(config);
   el.hass = hass;
+  // ?hide=text: the same render without the labels, so a measurement can
+  // tell the pixels behind the text from the text (see README, Development).
+  if (new URLSearchParams(location.search).get('hide') === 'text') {
+    const style = document.createElement('style');
+    style.textContent = '.labels, .labels * { color: transparent !important; }';
+    el.shadowRoot.appendChild(style);
+  }
   host.appendChild(el);
   return el;
 }
@@ -612,6 +679,24 @@ const SCENES = {
       col.appendChild(host);
       card({ buttons: BUTTON_POOL.slice(0, count).map((b) => ({ ...b })) }, host);
     }
+  },
+
+  graph() {
+    Date.now = () => NOW;
+    const items = (layout) => [
+      { type: 'graph', entity: 'sensor.wohnzimmer_temperatur', graph_layout: layout,
+        icon: 'mdi:thermometer', colspan: 2,
+        lines: [{ entity: 'sensor.aussen_temperatur' }] },
+      { name: 'Küche', icon: 'mdi:countertop', entity: 'light.kueche' },
+      { type: 'graph', entity: 'sensor.luftfeuchte', graph_layout: layout, icon: 'mdi:water-percent',
+        colors: { thresholds: [{ value: 40, color: 'amber' }, { value: 50, color: 'blue' }] } },
+      { type: 'graph', entity: 'sensor.leistung', graph_layout: layout, icon: 'mdi:flash',
+        graph: 'bar', points_per_hour: 0.5, label: '{{value}} · max {{max}}' },
+      { type: 'graph', entity: 'sensor.flur_temperatur', graph_layout: layout, icon: 'mdi:thermometer',
+        lower_bound: '~18', min_bound_range: 3 },
+    ];
+    card({ title: 'Klima', items: items('split') }, document.getElementById('graph-split'));
+    card({ title: 'Klima', items: items('background') }, document.getElementById('graph-background'));
   },
 
   progress() {

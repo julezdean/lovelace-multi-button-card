@@ -75,6 +75,10 @@ shoot visibility "1400,500" visibility 1
 # fixed, so the countdowns read the same on every run.
 shoot progress "1268,372" progress 1
 
+# Graphs in both arrangements. History and clock are fixed, so the curves
+# are the same on every run.
+shoot graph "1028,372" graph 1
+
 # No editor screenshot: tools/demo/ renders it against a stub, not against
 # Home Assistant's real ha-form, so an image would show a form that does not
 # exist anywhere. The scene stays for development (?scene=editor).

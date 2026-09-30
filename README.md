@@ -37,6 +37,7 @@ orphan rows and no layout jumps.
   - [Icons](#icons)
   - [Animations](#animations)
   - [Progress: `ring`, `bar`, `segments`, `digits`](#progress-ring-bar-segments-digits)
+  - [Graph](#graph)
 - [The visual editor](#the-visual-editor)
 - [Examples](#examples)
 - [Behaviour details](#behaviour-details)
@@ -70,7 +71,7 @@ Adding it by hand instead:
    - Type: **JavaScript module**
 3. Reload the browser
 
-Confirm it loaded: the browser console prints `multi-button-card v1.9.0-beta.7` on
+Confirm it loaded: the browser console prints `multi-button-card v1.9.0-beta.8` on
 startup.
 
 ---
@@ -278,8 +279,10 @@ items:
 | `bar` | A button's icon and name, the value in the state line, a bar along the bottom |
 | `segments` | The same with the bar in steps — five for a battery, twelve for an hour |
 | `digits` | The time or value in large digits where the icon would be |
+| `graph` | A sensor's recent history, full-bleed along the bottom of the cell |
 
-The last four are described under [Progress](#progress-ring-bar-segments-digits).
+The progress types are described under [Progress](#progress-ring-bar-segments-digits),
+the graph under [Graph](#graph).
 
 Some options belong to the item rather than to its type, and every type has
 them: `entity`, `colspan`, `visibility`, the three actions, `style`, and the
@@ -822,6 +825,98 @@ ring:
 
 ---
 
+### Graph
+
+A sensor's history over the last hours, modelled on
+[mini-graph-card](https://github.com/kalkih/mini-graph-card): its options where
+they make sense in a cell, drawn full-bleed along the bottom of the cell and cut
+by its rounded corners.
+
+![Graphs in both arrangements](docs/images/graph.png)
+
+```yaml
+items:
+  - type: graph
+    entity: sensor.wohnzimmer_temperatur
+    colspan: 2
+    lines:
+      - entity: sensor.aussen_temperatur
+  - type: graph
+    entity: sensor.leistung
+    graph: bar
+    points_per_hour: 0.5
+    label: "{{value}} · max {{max}}"
+```
+
+**Two arrangements**, set with `graph_layout`:
+
+| | |
+|---|---|
+| `split` *(default)* | The text on top — icon beside name and value, as a button with `layout: horizontal` has it — and the graph below |
+| `background` | A button's arrangement, with the graph behind it, muted |
+
+`split` keeps the text as readable as on a button. `background` looks more of a
+piece, at a cost: where a bar or a bright line runs behind the state line, its
+contrast drops from 4.5:1 to about 3.7:1 in the demo, even with the halo the text
+gets there. Next to a button, `split` puts the name higher than the button's —
+it sits at the top of its cell, not in the middle.
+
+A graph is a display, not a switch: it never counts as active, whatever its
+value, so a wall of temperatures does not light up. A tap opens more-info.
+
+#### Options
+
+| Option | Default | |
+|---|---|---|
+| `hours_to_show` | `24` | How far back, in hours (at most 240 — history is kept 10 days by default) |
+| `points_per_hour` | `1` | Resolution. Buckets are aligned to the clock, so the graph moves once per bucket |
+| `aggregate_func` | `avg` | Per bucket: `avg`, `median`, `min`, `max`, `first`, `last`, `sum`, `delta` (max − min), `diff` (last − first) |
+| `graph` | `line` | `line` or `bar` |
+| `fill` | `fade` | `fade`, `true` (solid) or `false` |
+| `smoothing` | `true` | Curves through the points, as mini-graph-card draws them |
+| `line_width` | `2` | px |
+| `graph_layout` | `split` | See above |
+| `graph_height` | `50%` | Share of the cell, or px. In `split` it never takes the room the text needs |
+| `lower_bound`, `upper_bound` | from the data | `15` is hard; `~15` is soft — the data may push past it |
+| `min_bound_range` | — | The smallest span of the scale, so 21.3 to 21.4 °C is not a mountain |
+| `logarithmic` | `false` | A log scale |
+| `attribute` | — | Draw an attribute instead of the state (`forecast.0.temperature` works) |
+| `state_map` | — | State → number, to draw `on`/`off` and the like |
+| `value_factor` | `0` | Scale by a power of ten: `-3` turns W into kW |
+| `unit`, `decimals` | from the entity | For the value in the state line and the placeholders |
+| `label` | the state | The state line, with `{{value}}`, `{{min}}`, `{{max}}`, `{{avg}}` (of what is drawn), `{{unit}}`, `{{name}}`, `{{state}}`, `{{attributes.x}}` |
+| `bar_spacing` | `2` | Between bars |
+
+**Colours.** The main line is the accent (`active_color`). `colors.thresholds`
+colours it by value, along its height — `color_thresholds` from a mini-graph-card
+config works too; `color_thresholds_transition: hard` gives each band one colour
+instead of a blend:
+
+```yaml
+colors:
+  thresholds:
+    - { value: 40, color: amber }
+    - { value: 50, color: blue }
+```
+
+**More lines** go under `lines:`, each with `entity` and optionally `attribute`,
+`color`, `fill`, `aggregate_func`, `state_map`, `smoothing`. Without a colour a
+line takes the next of the accent, `--blue-color`, `--orange-color`,
+`--green-color`, `--purple-color` and `--red-color`, so it follows the theme. Only
+the main line is filled by default. More than two lines want a wider cell —
+`colspan: 2` or more.
+
+**Where the data comes from.** Home Assistant's `history/stream`, the same
+subscription its own history graphs use: the history once, then every new
+state as it is recorded, and again by itself after a lost connection. Nothing
+is cached in the browser, so nothing can be stale. Long-term statistics — for
+weeks and months, or a bar per day — are not read yet.
+
+`lines`, `state_map` and the thresholds are YAML-only; the editor keeps them as
+they are.
+
+---
+
 ## The visual editor
 
 The card ships an editor, so it can be configured by clicking rather than by
@@ -860,6 +955,7 @@ Complete configurations are in [`examples/`](examples/):
 | [`large-dashboard.yaml`](examples/large-dashboard.yaml) | Ten buttons, tuned layout, confirmation |
 | [`mixed-dashboard.yaml`](examples/mixed-dashboard.yaml) | Entities, navigation, service calls, animations |
 | [`kitchen-timers.yaml`](examples/kitchen-timers.yaml) | The four progress types with a button: a timer, a machine's time left, a battery, a timestamp |
+| [`climate-graphs.yaml`](examples/climate-graphs.yaml) | Graphs: two temperatures in one, humidity with thresholds, power as bars |
 
 ---
 
@@ -930,7 +1026,7 @@ one), `constrained` (how the
 card behaves in a sections grid cell), `colspan` (both layout modes with the
 measured widths printed, so the span arithmetic is checkable), `visibility`, `compact`, `animations`,
 `editor`, `progress` (the four progress types at three cell sizes, on a fixed
-clock) and `tick` (a countdown on the real clock, with a log of what it shows
+clock), `graph` (both arrangements, on a computed history) and `tick` (a countdown on the real clock, with a log of what it shows
 and how often it writes to the DOM).
 
 The `editor` scene is for development only and is deliberately not
@@ -938,6 +1034,10 @@ screenshotted: it renders against a stub, not against Home Assistant's real
 `ha-form`, so an image of it would show a form that exists nowhere. It does
 verify the wiring - schema read, `value-changed` handled, config written back,
 `config-changed` emitted.
+
+`?hide=text` renders a scene with the text made transparent. Compared with the
+normal render, it tells the pixels behind the text from the text itself, which
+is how the contrast figures for `graph_layout: background` were measured.
 
 The window sizes in `tools/screenshots.sh` are measured, not guessed — if you
 add a button to a scene, re-measure and update them.

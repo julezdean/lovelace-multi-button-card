@@ -49,8 +49,8 @@ for (const file of FILES) {
       }
 
       // An animation type that fell back to 'none' means the example named a
-      // type that does not exist.
-      if (button.animation.type === 'none') {
+      // type that does not exist. Not every item type animates.
+      if (button.animation && button.animation.type === 'none') {
         const source = (raw.items ?? raw.buttons)[index].animation ?? raw.animation;
         const requested = typeof source === 'object' ? source && source.type : source;
         assert.ok(
