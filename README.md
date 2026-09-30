@@ -71,7 +71,7 @@ Adding it by hand instead:
    - Type: **JavaScript module**
 3. Reload the browser
 
-Confirm it loaded: the browser console prints `multi-button-card v1.9.0-beta.8` on
+Confirm it loaded: the browser console prints `multi-button-card v1.9.0-beta.9` on
 startup.
 
 ---
@@ -900,11 +900,31 @@ colors:
 ```
 
 **More lines** go under `lines:`, each with `entity` and optionally `attribute`,
-`color`, `fill`, `aggregate_func`, `state_map`, `smoothing`. Without a colour a
+`color`, `fill`, `aggregate_func`, `state_map`, `smoothing` and `y_axis`. Without a colour a
 line takes the next of the accent, `--blue-color`, `--orange-color`,
 `--green-color`, `--purple-color` and `--red-color`, so it follows the theme. Only
 the main line is filled by default. More than two lines want a wider cell —
 `colspan: 2` or more.
+
+**A second axis.** All lines share one scale unless told otherwise, which is
+right for the same quantity in two places — inside and outside. For two
+different quantities it is not: next to a humidity around 50 %, a temperature
+around 21 °C becomes a straight line. `y_axis: secondary` gives a line a scale
+of its own, over the same height, as in mini-graph-card:
+
+```yaml
+- type: graph
+  entity: sensor.temperatur_wohnung
+  lines:
+    - entity: sensor.luftfeuchtigkeit_wohnung
+      y_axis: secondary
+  label: "[[[ return entity.state + ' °C · ' + states['sensor.luftfeuchtigkeit_wohnung'].state + ' %' ]]]"
+```
+
+The secondary scale takes `lower_bound_secondary`, `upper_bound_secondary` and
+`min_bound_range_secondary`. There are no axis labels — a cell has no room
+for them — so the state line is where both values are read: the label above
+shows how. The main line and the thresholds always use the primary scale.
 
 **Where the data comes from.** Home Assistant's `history/stream`, the same
 subscription its own history graphs use: the history once, then every new

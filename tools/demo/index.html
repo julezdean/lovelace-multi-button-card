@@ -278,6 +278,7 @@
   <div class="strip">
     <div class="col" style="width: 480px"><p class="caption">graph_layout: split</p><div id="graph-split"></div></div>
     <div class="col" style="width: 480px"><p class="caption">graph_layout: background</p><div id="graph-background"></div></div>
+    <div class="col" style="width: 300px"><p class="caption">y_axis: secondary</p><div id="graph-axes"></div></div>
   </div>
 </div>
 
@@ -697,6 +698,15 @@ const SCENES = {
     ];
     card({ title: 'Klima', items: items('split') }, document.getElementById('graph-split'));
     card({ title: 'Klima', items: items('background') }, document.getElementById('graph-background'));
+    // Temperature and humidity: on one axis the temperature is a straight
+    // line, on two each takes the whole height.
+    card({ title: 'Achsen', items: [
+      { type: 'graph', entity: 'sensor.wohnzimmer_temperatur', name: '1 Achse', icon: 'mdi:thermometer',
+        lines: [{ entity: 'sensor.luftfeuchte' }] },
+      { type: 'graph', entity: 'sensor.wohnzimmer_temperatur', name: '2 Achsen', icon: 'mdi:thermometer',
+        label: "[[[ return entity.state + ' °C · ' + states['sensor.luftfeuchte'].state + ' %' ]]]",
+        lines: [{ entity: 'sensor.luftfeuchte', y_axis: 'secondary' }] },
+    ] }, document.getElementById('graph-axes'));
   },
 
   progress() {

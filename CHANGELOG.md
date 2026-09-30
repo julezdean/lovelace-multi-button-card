@@ -6,6 +6,16 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [1.9.0-beta.9] - 2026-09-30
+
+### Added
+
+- `y_axis: secondary` on a graph's line gives it a scale of its own, with
+  `lower_bound_secondary`, `upper_bound_secondary` and
+  `min_bound_range_secondary`, as mini-graph-card has it. On one shared
+  scale a humidity next to a temperature flattened the temperature to a
+  straight line.
+
 ## [1.9.0-beta.8] - 2026-09-30
 
 A sensor's history as an item type, modelled on mini-graph-card.

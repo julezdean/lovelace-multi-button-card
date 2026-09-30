@@ -8,7 +8,7 @@ import { normalizeConfig } from '../src/main.ts';
 import { bucketize, summarize, windowFor } from '../src/graph/aggregate.ts';
 import { mergeHistory, pointsOf, toValue } from '../src/graph/history.ts';
 import { linePaths, parseBound, scaleFor, thresholdStops, yOf } from '../src/graph/scale.ts';
-import { decimalsOf, PALETTE } from '../src/items/graph/graph.ts';
+import { decimalsOf, graphType, PALETTE } from '../src/items/graph/graph.ts';
 
 const HOUR = 3_600_000;
 const item = (config) => normalizeConfig({ items: [config] }).items[0];
@@ -172,4 +172,53 @@ test('min and max are shown in the precision the entity reports in', () => {
   assert.equal(decimalsOf('212'), 0);
   assert.equal(decimalsOf('21.4'), 1);
   assert.equal(decimalsOf('on'), 0);
+});
+
+/* -- a second axis ------------------------------------------------------------ */
+
+
+/** The vertical extent of a drawn line, in viewBox units (0..100). */
+const extent = (d) => {
+  const ys = [...d.matchAll(/[-\d.]+,([-\d.]+)/g)].map((m) => Number(m[1]));
+  return Math.max(...ys) - Math.min(...ys);
+};
+
+const NOW = 100 * HOUR;
+const historyOf = (id, from, to) => ({
+  [id]: Array.from({ length: 25 }, (_, i) => ({ s: String(from + ((to - from) * i) / 24), lu: (NOW - 24 * HOUR + i * HOUR) / 1000 })),
+});
+const viewOf = (config) => {
+  const g = normalizeConfig({ items: [config] }).items[0];
+  const data = { ...historyOf('sensor.t', 20, 22), ...historyOf('sensor.h', 45, 55) };
+  const hass = { states: {}, callService() {} };
+  const context = { hass, stateObj: undefined, resolve: (v) => v, now: NOW, data, geometry: {} };
+  return graphType.view(g, context);
+};
+
+test('on one axis, a humidity flattens a temperature next to it', () => {
+  const view = viewOf({ type: 'graph', entity: 'sensor.t', lines: [{ entity: 'sensor.h' }] });
+  assert.ok(extent(view.paths[0].line) < 10, `temperature spans ${extent(view.paths[0].line)}`);
+});
+
+test('on a secondary axis, each line gets the whole height', () => {
+  const view = viewOf({
+    type: 'graph',
+    entity: 'sensor.t',
+    lines: [{ entity: 'sensor.h', y_axis: 'secondary' }],
+  });
+  assert.ok(extent(view.paths[0].line) > 80, `temperature spans ${extent(view.paths[0].line)}`);
+  assert.ok(extent(view.paths[1].line) > 80, `humidity spans ${extent(view.paths[1].line)}`);
+});
+
+test('the secondary axis has bounds of its own', () => {
+  const view = viewOf({
+    type: 'graph',
+    entity: 'sensor.t',
+    lines: [{ entity: 'sensor.h', y_axis: 'secondary' }],
+    lower_bound_secondary: 0,
+    upper_bound_secondary: 100,
+  });
+  const humidity = extent(view.paths[1].line);
+  assert.ok(humidity > 5 && humidity < 15, `10 of 100 points is about a tenth: ${humidity}`);
+  assert.ok(extent(view.paths[0].line) > 80, 'the primary axis is untouched');
 });

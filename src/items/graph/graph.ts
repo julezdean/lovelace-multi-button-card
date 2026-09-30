@@ -68,6 +68,12 @@ export interface GraphLine extends LineSource {
   fill: boolean | 'fade';
   aggregate_func: AggregateFunc;
   smoothing: boolean;
+  /**
+   * Which scale the line is drawn on. `secondary` gives it one of its own,
+   * as mini-graph-card's y_axis does - a humidity next to a temperature
+   * would otherwise flatten the temperature to a straight line.
+   */
+  y_axis: 'primary' | 'secondary';
 }
 
 export interface GraphItem extends ItemBase {
@@ -85,6 +91,9 @@ export interface GraphItem extends ItemBase {
   lower_bound: Bound;
   upper_bound: Bound;
   min_bound_range: number | null;
+  lower_bound_secondary: Bound;
+  upper_bound_secondary: Bound;
+  min_bound_range_secondary: number | null;
   logarithmic: boolean;
   bar_spacing: number;
   graph_layout: 'split' | 'background';
@@ -188,6 +197,9 @@ function normalizeGraph(src: Dict, base: ItemBase, defaults: Dict): GraphItem {
         fill,
         aggregate_func: func,
         smoothing,
+        // The main line sets the primary scale; that is what its value and
+        // the thresholds refer to.
+        y_axis: 'primary',
       }
     : null;
 
@@ -207,11 +219,15 @@ function normalizeGraph(src: Dict, base: ItemBase, defaults: Dict): GraphItem {
       fill: fillOf(line.fill, false),
       aggregate_func: oneOf(line.aggregate_func, AGGREGATE_FUNCS, func),
       smoothing: line.smoothing === undefined ? smoothing : line.smoothing !== false,
+      y_axis: (line.y_axis === 'secondary' ? 'secondary' : 'primary') as GraphLine['y_axis'],
     }));
 
   const height = pick('graph_height');
   const decimals = Number(pick('decimals'));
-  const minRange = Number(pick('min_bound_range'));
+  const range = (key: string) => {
+    const value = Number(pick(key));
+    return Number.isFinite(value) && value > 0 ? value : null;
+  };
 
   return {
     ...base,
@@ -228,7 +244,10 @@ function normalizeGraph(src: Dict, base: ItemBase, defaults: Dict): GraphItem {
     line_width: positive(pick('line_width'), 2, 12),
     lower_bound: parseBound(pick('lower_bound')),
     upper_bound: parseBound(pick('upper_bound')),
-    min_bound_range: Number.isFinite(minRange) && minRange > 0 ? minRange : null,
+    min_bound_range: range('min_bound_range'),
+    lower_bound_secondary: parseBound(pick('lower_bound_secondary')),
+    upper_bound_secondary: parseBound(pick('upper_bound_secondary')),
+    min_bound_range_secondary: range('min_bound_range_secondary'),
     logarithmic: pick('logarithmic') === true,
     bar_spacing: Math.max(0, Number(pick('bar_spacing')) || 0),
     graph_layout: oneOf(pick('graph_layout'), ['split', 'background'] as const, 'split'),
@@ -301,16 +320,27 @@ function graphView(item: GraphItem, context: SyncContext): GraphView {
   const series = item.lines.map((line) =>
     history ? bucketize(pointsOf(history, line), window, line.aggregate_func) : [],
   );
-  const scale = scaleFor(
-    series,
+  // Each axis is scaled by its own lines only. Without a secondary line the
+  // secondary scale is simply never used.
+  const on = (axis: GraphLine['y_axis']) => series.filter((_, i) => item.lines[i].y_axis === axis);
+  const scale0 = scaleFor(
+    on('primary'),
     item.lower_bound,
     item.upper_bound,
     item.min_bound_range,
     item.logarithmic,
   );
+  const secondary = scaleFor(
+    on('secondary'),
+    item.lower_bound_secondary,
+    item.upper_bound_secondary,
+    item.min_bound_range_secondary,
+    item.logarithmic,
+  );
 
   const bars = item.graph === 'bar';
   const paths = series.map((values, i) => {
+    const scale = item.lines[i].y_axis === 'secondary' ? secondary : scale0;
     if (!scale || !values.length) return { line: '', fill: '' };
     if (bars) return { line: '', fill: barPath(values, scale, i, series.length, item.bar_spacing) };
     return linePaths(values, scale, item.lines[i].smoothing);
@@ -352,8 +382,8 @@ function graphView(item: GraphItem, context: SyncContext): GraphView {
     line,
     paths,
     stops:
-      scale && item.thresholds.length
-        ? thresholdStops(item.thresholds, scale, item.threshold_transition === 'hard')
+      scale0 && item.thresholds.length
+        ? thresholdStops(item.thresholds, scale0, item.threshold_transition === 'hard')
         : null,
     // The window moves on when the current bucket is full.
     refreshAt: window.end,
