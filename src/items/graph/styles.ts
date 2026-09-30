@@ -31,6 +31,7 @@ export const GRAPH_STYLES = `
   vector-effect: non-scaling-stroke;
 }
 .graph-fill { stroke: none; }
+.btn.graph.drawing-off .graph-area { display: none; }
 .btn.graph.unavailable .graph-area,
 .btn.graph.invalid .graph-area { opacity: 0.4; }
 

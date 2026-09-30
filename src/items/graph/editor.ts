@@ -1,5 +1,10 @@
 import { AGGREGATE_FUNCS } from '../../graph/aggregate';
-import { ACTIONS_SECTION, select } from '../../editor/schema';
+import {
+  ACTIONS_SECTION,
+  ACTIVE_WHEN_FIELD,
+  select,
+  SHOW_DRAWING_FIELD,
+} from '../../editor/schema';
 import {
   actionFromForm,
   actionToForm,
@@ -14,6 +19,7 @@ const SCHEMA = [
   { name: 'name', selector: { text: {} } },
   { name: 'icon', selector: { icon: {} } },
   { name: 'colspan', selector: { number: { min: 1, max: 6, mode: 'box' } } },
+  ACTIVE_WHEN_FIELD,
   {
     type: 'expandable',
     name: '',
@@ -71,6 +77,7 @@ const SCHEMA = [
     title: 'Display',
     icon: 'mdi:text-short',
     schema: [
+      SHOW_DRAWING_FIELD,
       { name: 'show_name', selector: { boolean: {} } },
       { name: 'label', selector: { text: {} } },
       { name: 'unit', selector: { text: {} } },
@@ -120,6 +127,8 @@ const FORM_KEYS = [
   'active_color',
   'background',
   'style',
+  'active_when',
+  'show_drawing',
 ] as const;
 
 const FORM_DEFAULTS: Dict = {
@@ -134,6 +143,7 @@ const FORM_DEFAULTS: Dict = {
   aggregate_func: 'avg',
   show_name: true,
   colspan: 1,
+  show_drawing: 'always',
 };
 
 /** fill is true, false or 'fade'; a select only carries strings. */
@@ -184,6 +194,8 @@ export const graphEditor: ItemEditor = {
       active_color: item.active_color ?? '',
       background: item.background ?? '',
       style: item.style ?? '',
+      active_when: item.active_when ?? '',
+      show_drawing: item.show_drawing ?? 'always',
     };
   },
 
@@ -236,6 +248,8 @@ export const graphEditor: ItemEditor = {
         active_color: value.active_color,
         background: value.background,
         style: value.style,
+        active_when: value.active_when,
+        show_drawing: value.show_drawing,
       },
       defaults,
     );

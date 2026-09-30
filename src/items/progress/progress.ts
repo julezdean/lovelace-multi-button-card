@@ -1,3 +1,5 @@
+import { drawingShown } from '../../core/active';
+import { animationActive } from '../../core/animation';
 import { hasTemplate } from '../../core/templates';
 import { normalizeProgress, PROGRESS_DEFAULTS, TYPE_DEFAULTS } from '../../progress/config';
 import { engineEnv, evaluate, type ProgressView } from '../../progress/engine';
@@ -34,6 +36,8 @@ export interface ItemView {
   line: string;
   /** ring: what is in the middle, after `inner: auto` has been decided. */
   inner: 'value' | 'percentage' | 'icon' | 'none';
+  /** show_drawing, decided. Without it the item looks like a button. */
+  showDrawing: boolean;
 }
 
 /** One type's drawing: built once, painted on every change. */
@@ -74,12 +78,27 @@ function progressView(
       : undefined;
   const p = evaluate(readSnapshot(hass, item, now, rendered), item, now, engineEnv(hass, stateObj));
 
-  const inner = innerFor(item, p, context);
+  // active_when overrides "running or paused"; the animation follows it
+  // where it runs on being active.
+  if (context.activeWhen !== null) {
+    p.active = context.activeWhen;
+    if (item.animation.when !== 'finishing' && item.animation.when !== 'finished') {
+      p.animate = animationActive(item.animation, stateObj, p.active);
+    }
+  }
+  const showDrawing = drawingShown(item, resolve, p.active);
+
+  // Without its drawing a ring is a button: the icon in its place, the value
+  // in the state line.
+  const inner = showDrawing ? innerFor(item, p, context) : item.type === 'ring' ? 'icon' : 'none';
   const label = resolve(item.label);
   let line: string;
   if (p.error) line = p.error;
   else if (label !== undefined && label !== null && label !== '') {
     line = hasTemplate(item.label) ? String(label) : fillLabel(String(label), p.values, stateObj);
+  } else if (!showDrawing && item.type === 'digits') {
+    // The digits are gone, so the value comes down to the state line.
+    line = [p.value, p.status !== 'active' ? p.statusText : undefined].filter(Boolean).join(' · ');
   } else line = drawing.line(p, inner);
 
   return {
@@ -89,6 +108,7 @@ function progressView(
     icon: resolveIcon(item, stateObj, resolve),
     line,
     inner,
+    showDrawing,
   };
 }
 
@@ -144,6 +164,7 @@ function paintShared(parts: ProgressParts, item: ProgressItem, view: ItemView): 
   setVar(root, '--mbc-progress', view.p.color);
   root.classList.toggle('indeterminate', view.p.progress === null);
   root.classList.toggle('data-error', !!view.p.error);
+  root.classList.toggle('drawing-off', !view.showDrawing);
   root.dataset.status = view.p.status;
 
   const showName = view.showName !== false && !!view.name;
@@ -482,6 +503,7 @@ function barDrawing(segmented: boolean): Drawing<BarParts> {
 /* --- digits ------------------------------------------------------------------ */
 
 interface DigitParts extends ProgressParts {
+  iconEl?: StateIcon;
   row: HTMLElement;
   groups: HTMLElement[];
   sign: HTMLElement;
@@ -510,6 +532,15 @@ const digits: Drawing<DigitParts> = {
   },
   paint(parts, item, view, context) {
     const { p } = view;
+    // Without its drawing, the icon stands where the digits would.
+    if (!view.showDrawing) {
+      paintIcon(parts, parts.visual, 'icon', view.icon, context);
+      (parts.iconEl as StateIcon).style.display = '';
+      parts.row.style.display = 'none';
+      parts.text.style.display = 'none';
+      return;
+    }
+    if (parts.iconEl) parts.iconEl.style.display = 'none';
     const groups = p.digits;
     // Text instead of digits: a finished countdown saying so, or an error.
     const asText = groups.length === 0;

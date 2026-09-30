@@ -22,11 +22,11 @@ export const CONFIRM_TIMEOUT_MS = 4000;
 /** How long a stateless entity reads as active after it was triggered. */
 export const PRESS_FLASH_MS = 1000;
 
-/** Built-in confirmation prompts, per gesture: repeat what armed it. */
+/** Built-in confirmation prompts, per gesture. A tap confirms, whatever armed it. */
 export const CONFIRM_TEXT = {
   tap: 'Tap again to confirm',
-  hold: 'Hold again to confirm',
-  double_tap: 'Double-tap again to confirm',
+  hold: 'Tap to confirm',
+  double_tap: 'Tap to confirm',
 } as const;
 
 /** Above this a touch target cannot survive, whatever the config says. */

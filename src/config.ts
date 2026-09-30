@@ -43,7 +43,15 @@ export const DEFAULT_ITEM: Dict = {
 export const ITEM_KEYS = Object.keys(DEFAULT_ITEM);
 
 /** Cell fields a template may fill, for every type. */
-const ITEM_TEMPLATED_FIELDS = ['color', 'active_color', 'background', 'active_background', 'style'];
+const ITEM_TEMPLATED_FIELDS = [
+  'color',
+  'active_color',
+  'background',
+  'active_background',
+  'style',
+  'active_when',
+  'show_drawing',
+];
 
 /**
  * Turn whatever the user wrote into a fully resolved object.
@@ -144,6 +152,8 @@ function normalizeItem(
     // CSS declarations for this item, e.g. "border: 2px solid red".
     // Templated like every other presentation field.
     style: src.style ?? null,
+    active_when: src.active_when ?? defaults.active_when ?? null,
+    show_drawing: src.show_drawing ?? defaults.show_drawing ?? 'always',
     // `visibility` is the sections spelling, `conditions` the conditional
     // card's. Both appear in the wild, so both are accepted.
     visibility: normalizeVisibility(src.visibility ?? src.conditions),

@@ -282,6 +282,14 @@
   </div>
 </div>
 
+<!-- Scene: active_when and show_drawing - the same card, timer running and idle -->
+<div class="scene" id="scene-drawing">
+  <div class="strip">
+    <div class="col" style="width: 480px"><p class="caption">Timer running</p><div id="drawing-on"></div></div>
+    <div class="col" style="width: 480px"><p class="caption">Timer idle</p><div id="drawing-off"></div></div>
+  </div>
+</div>
+
 <!-- Scene: development only - a countdown on the real clock, sampled -->
 <div class="scene" id="scene-tick">
   <div class="frame" style="width: 480px"><div id="tick-host"></div></div>
@@ -680,6 +688,34 @@ const SCENES = {
       col.appendChild(host);
       card({ buttons: BUTTON_POOL.slice(0, count).map((b) => ({ ...b })) }, host);
     }
+  },
+
+  drawing() {
+    Date.now = () => NOW;
+    const items = [
+      { type: 'ring', entity: 'timer.kaffee', icon: 'mdi:coffee', show_drawing: 'active' },
+      { type: 'bar', entity: 'timer.kaffee', name: 'Kaffee', icon: 'mdi:coffee', show_drawing: 'active' },
+      { type: 'digits', entity: 'timer.kaffee', name: 'Kaffee', icon: 'mdi:coffee', show_drawing: 'active' },
+      // A button lit by a template instead of by its own state.
+      { name: 'Lüften', icon: 'mdi:window-open-variant', entity: 'sensor.luftfeuchte',
+        show_state: true, active_when: '[[[ return Number(entity.state) > 45 ]]]' },
+      // The graph only while the humidity is high: active_when makes it
+      // active, show_drawing shows it then.
+      { type: 'graph', entity: 'sensor.luftfeuchte', icon: 'mdi:water-percent', colspan: 2,
+        active_when: '[[[ return Number(entity.state) > 45 ]]]', show_drawing: 'active' },
+    ];
+    const idle = {
+      ...hass,
+      states: {
+        ...hass.states,
+        'timer.kaffee': { ...hass.states['timer.kaffee'], state: 'idle',
+          attributes: { friendly_name: 'Kaffee', duration: '0:05:00', last_transition: 'cancelled' } },
+        'sensor.luftfeuchte': { ...hass.states['sensor.luftfeuchte'], state: '41' },
+      },
+    };
+    card({ items }, document.getElementById('drawing-on'));
+    const off = card({ items }, document.getElementById('drawing-off'));
+    off.hass = idle;
   },
 
   graph() {
@@ -1244,6 +1280,8 @@ const SCENES = {
           const startCount = ed.conditions.length;
           ed.querySelector('.cond-add').click();
           const added = kept && kept.visibility ? kept.visibility.length : 0;
+          // HA's editor is controlled: it only shows what it is handed back.
+          const shown = ed.querySelectorAll('.cond').length;
           // Remove every condition -> visibility must disappear entirely.
           let guard = 0;
           while (sr.querySelector('.cond button') && guard++ < 10) {
@@ -1251,7 +1289,7 @@ const SCENES = {
           }
           lines.push('',
             `conditions editor: mounted, started with ${startCount}`,
-            `after + add condition: ${added}`,
+            `after + add condition: ${added} in the config, ${shown} shown in the editor`,
             `after removing all: visibility key = ${JSON.stringify(kept.visibility)}`,
             `full button: ${JSON.stringify(kept)}`);
         }

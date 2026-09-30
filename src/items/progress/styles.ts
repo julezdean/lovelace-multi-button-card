@@ -55,6 +55,23 @@ export const PROGRESS_STYLES = `
   height: var(--mbc-icon-size);
 }
 
+/* --- show_drawing ------------------------------------------------------------ */
+
+/* Without its drawing the item is a button: the icon in the drawing's place,
+   at a button icon's size. The row keeps the room it reserved, so nothing
+   in it moves when a timer starts or stops. */
+.btn.progress.drawing-off .visual.ring svg,
+.btn.progress.drawing-off .bar-track,
+.btn.progress.drawing-off .segments-track { display: none; }
+.btn.progress.drawing-off .visual.ring .inner-icon,
+.btn.progress.drawing-off .visual.digits .icon {
+  --mdc-icon-size: var(--mbc-icon-size);
+  width: var(--mbc-icon-size);
+  height: var(--mbc-icon-size);
+}
+.btn.progress.drawing-off .visual.digits .icon { display: flex; color: var(--mbc-icon-color, var(--mbc-text-dim)); }
+.btn.progress.drawing-off.active .visual.digits .icon { color: var(--mbc-fill); }
+
 /* --- ring ---------------------------------------------------------------- */
 
 .visual.ring {

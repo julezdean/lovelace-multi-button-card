@@ -71,7 +71,7 @@ Adding it by hand instead:
    - Type: **JavaScript module**
 3. Reload the browser
 
-Confirm it loaded: the browser console prints `multi-button-card v1.9.0-beta.9` on
+Confirm it loaded: the browser console prints `multi-button-card v1.9.0-beta.10` on
 startup.
 
 ---
@@ -285,8 +285,40 @@ The progress types are described under [Progress](#progress-ring-bar-segments-di
 the graph under [Graph](#graph).
 
 Some options belong to the item rather than to its type, and every type has
-them: `entity`, `colspan`, `visibility`, the three actions, `style`, and the
-cell options below. An entry with a type this version does not know is shown as
+them: `entity`, `colspan`, `visibility`, the three actions, `style`,
+`active_when`, and the cell options below.
+
+**`active_when`** decides when an item counts as active — lit outline and
+accent, a progress fill in colour, animations with `when: active` — instead of
+its type's own rule. It is a template:
+
+```yaml
+- name: Lüften
+  icon: mdi:window-open-variant
+  entity: sensor.luftfeuchte
+  active_when: "[[[ return Number(entity.state) > 60 ]]]"
+```
+
+Without it, a button follows Home Assistant's active semantics, a countdown is
+active while it runs or is paused, and a graph never is. With it, the template
+alone decides — a template that fails reads as not active.
+
+**`show_drawing`** — for the progress types and the graph — decides whether the
+drawing is shown: `always` (the default), `active`, or a template. Without its
+drawing an item looks like a button: a ring or digits become the icon, a bar or
+a graph disappears, the value moves to the state line. The row keeps the room it
+had, so nothing moves when a timer starts:
+
+```yaml
+- type: ring
+  entity: timer.kaffee
+  show_drawing: active          # the ring only while the timer runs
+```
+
+![show_drawing and active_when](docs/images/drawing.png)
+
+Hiding the whole item is still [`visibility`](#visibility); `show_drawing`
+keeps the item and only drops its drawing. An entry with a type this version does not know is shown as
 a dashed cell with the reason in it; the rest of the card keeps working.
 
 ### `item` (the cell of every item)
@@ -575,12 +607,12 @@ each ask for it independently:
       text: Nochmal halten zum Bestätigen
 ```
 
-It does not open a modal. The first gesture arms the button — it turns red and
-shows the confirmation text — and the same gesture again within four seconds
-runs the action. Only the same gesture confirms: a tap on a button armed by a
-hold does not run the hold action. Nothing happens if you walk away. The
-built-in texts are English (`Tap again to confirm`, `Hold again to confirm`,
-`Double-tap again to confirm`), so set `text` if your dashboard is in another
+It does not open a modal. The first gesture arms the item — it turns red and
+shows the confirmation text — and a **tap** within four seconds runs what was
+armed. A tap confirms whatever armed it: on an item armed by a hold, the tap
+runs the hold action, not the tap action. Holding again only arms it anew.
+Nothing happens if you walk away. The built-in texts are English
+(`Tap again to confirm`, `Tap to confirm`), so set `text` if your dashboard is in another
 language.
 
 `confirmation` directly on the button is the older spelling and still works; it
@@ -1046,7 +1078,8 @@ one), `constrained` (how the
 card behaves in a sections grid cell), `colspan` (both layout modes with the
 measured widths printed, so the span arithmetic is checkable), `visibility`, `compact`, `animations`,
 `editor`, `progress` (the four progress types at three cell sizes, on a fixed
-clock), `graph` (both arrangements, on a computed history) and `tick` (a countdown on the real clock, with a log of what it shows
+clock), `graph` (both arrangements, on a computed history), `drawing`
+(`show_drawing` and `active_when`, timer running and idle) and `tick` (a countdown on the real clock, with a log of what it shows
 and how often it writes to the DOM).
 
 The `editor` scene is for development only and is deliberately not

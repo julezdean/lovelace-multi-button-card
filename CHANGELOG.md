@@ -6,6 +6,29 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [1.9.0-beta.10] - 2026-09-30
+
+### Added
+
+- `active_when`, for every item type: a template that decides when the item
+  counts as active, instead of the type's own rule.
+- `show_drawing`, for the progress types and the graph: `always`, `active`
+  or a template. Without its drawing an item looks like a button, and its
+  row does not move when the drawing comes and goes.
+
+### Changed
+
+- A tap confirms whatever armed an item. An item armed by a hold now shows
+  `Tap to confirm`, and the tap runs the hold action; holding again only
+  arms it anew. Before, only the gesture that armed it could confirm.
+
+### Fixed
+
+- Adding a visibility condition in the editor seemed to do nothing, though
+  the condition reached the YAML. Home Assistant's conditions editor only
+  shows what it is handed back, and the card never handed it back. This was
+  there since the visibility editor was added in 1.4.0.
+
 ## [1.9.0-beta.9] - 2026-09-30
 
 ### Added

@@ -135,6 +135,7 @@ const SHARED_KEYS = [
   'label_size',
   'press_effect',
   'attribute',
+  'active_when',
 ];
 
 function typeOf(item: Dict): ItemType | undefined {
@@ -160,6 +161,8 @@ export class MultiButtonCardEditor extends BaseElement {
    * open - the saved config carries only what the current type reads.
    */
   private _stash = new Map<number, Dict>();
+  /** The mounted conditions editor, kept in step with the config. */
+  private _conditionsEditor: (HTMLElement & { conditions?: unknown; hass?: unknown }) | null = null;
 
   constructor() {
     super();
@@ -212,6 +215,7 @@ export class MultiButtonCardEditor extends BaseElement {
     const root = this.shadowRoot as ShadowRoot;
     root.textContent = '';
     this._form = null;
+    this._conditionsEditor = null;
 
     const style = document.createElement('style');
     style.textContent = EDITOR_STYLES;
@@ -535,8 +539,15 @@ export class MultiButtonCardEditor extends BaseElement {
         : Array.isArray(detail.conditions)
           ? detail.conditions
           : null;
-      if (next) this._conditionsChanged(index, next);
+      if (!next) return;
+      // Home Assistant's conditions editor is controlled: it announces the
+      // new list and waits to be handed it back - only then does it show,
+      // and open, a condition just added. Not handing it back is what made
+      // "Entity state" appear to do nothing while it did reach the YAML.
+      editor.conditions = next;
+      this._conditionsChanged(index, next);
     });
+    this._conditionsEditor = editor;
 
     slot.replaceChildren(
       Object.assign(document.createElement('div'), {
@@ -593,6 +604,14 @@ export class MultiButtonCardEditor extends BaseElement {
     const item = config.items[this._openItem] || {};
     const itemType = typeOf(item);
     if (itemType) this._form.data = itemType.editor.toForm(item, { config });
+    // Conditions edited elsewhere - the card's own YAML - reach it too.
+    const editor = this._conditionsEditor;
+    if (editor && editor.isConnected) {
+      const conditions = normalizeVisibility(item.visibility ?? item.conditions);
+      if (JSON.stringify(conditions) !== JSON.stringify(editor.conditions)) {
+        editor.conditions = conditions;
+      }
+    }
   }
 
   /* --- data in and out -------------------------------------------------- */

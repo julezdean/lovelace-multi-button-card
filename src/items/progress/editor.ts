@@ -1,5 +1,10 @@
 import { VALID_ANIMATIONS } from '../../core/animation';
-import { ACTIONS_SECTION, select } from '../../editor/schema';
+import {
+  ACTIONS_SECTION,
+  ACTIVE_WHEN_FIELD,
+  select,
+  SHOW_DRAWING_FIELD,
+} from '../../editor/schema';
 import {
   actionFromForm,
   actionToForm,
@@ -75,6 +80,7 @@ function schema(type: ProgressItem['type']): unknown[] {
     { name: 'name', selector: { text: {} } },
     { name: 'icon', selector: { icon: {} } },
     { name: 'colspan', selector: { number: { min: 1, max: 6, mode: 'box' } } },
+    ACTIVE_WHEN_FIELD,
     {
       type: 'expandable',
       name: 'source',
@@ -110,6 +116,7 @@ function schema(type: ProgressItem['type']): unknown[] {
       icon: 'mdi:text-short',
       schema: [
         ...drawingSchema(type),
+        SHOW_DRAWING_FIELD,
         { name: 'show_name', selector: { boolean: {} } },
         { name: 'label', selector: { text: {} } },
       ],
@@ -217,6 +224,8 @@ const FORM_KEYS = [
   'background',
   'active_background',
   'style',
+  'active_when',
+  'show_drawing',
   'animation',
 ] as const;
 
@@ -293,6 +302,8 @@ export function progressEditor(type: ProgressItem['type'], label: string): ItemE
         background: item.background ?? '',
         active_background: item.active_background ?? '',
         style: item.style ?? '',
+        active_when: item.active_when ?? '',
+        show_drawing: item.show_drawing ?? 'always',
         animation: {
           type: 'none',
           when: 'active',
@@ -360,11 +371,14 @@ export function progressEditor(type: ProgressItem['type'], label: string): ItemE
           background: value.background,
           active_background: value.active_background,
           style: value.style,
+          active_when: value.active_when,
+          show_drawing: value.show_drawing,
           animation: value.animation,
         },
         {
           colspan: 1,
           show_name: true,
+          show_drawing: 'always',
           source: { type: 'auto' },
           progress: { direction: 'remaining' },
           format: { style: 'auto', show_seconds: 'auto', decimals: 0 },

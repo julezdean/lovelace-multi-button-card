@@ -28,6 +28,8 @@ export interface SyncContext {
   now: number;
   /** What the type's own subscription last delivered, if it has one. */
   data: unknown;
+  /** `active_when`, if the item sets it: it overrides the type's own rule. */
+  activeWhen: boolean | null;
 }
 
 /** The measured geometry a layout pass hands to every cell. */

@@ -113,6 +113,16 @@ export interface ItemBase {
   label_size: unknown;
   press_effect: string;
   style: unknown;
+  /**
+   * `[[[ template ]]]` deciding when the item counts as active, instead of
+   * the type's own rule. null = the type decides.
+   */
+  active_when: unknown;
+  /**
+   * Whether a type that draws something - a ring, a bar, a graph - draws it:
+   * `always`, `active`, or a template.
+   */
+  show_drawing: unknown;
 
   visibility: Dict[];
   weight: number;

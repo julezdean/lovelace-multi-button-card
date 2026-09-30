@@ -1,5 +1,10 @@
 import { DEFAULT_ANIMATION } from '../../core/animation';
-import { ACTIONS_SECTION, ANIMATION_SCHEMA, LAYOUT_SELECT } from '../../editor/schema';
+import {
+  ACTIONS_SECTION,
+  ACTIVE_WHEN_FIELD,
+  ANIMATION_SCHEMA,
+  LAYOUT_SELECT,
+} from '../../editor/schema';
 import {
   actionFromForm,
   actionToForm,
@@ -18,6 +23,7 @@ const BUTTON_SCHEMA = [
   { name: 'name', selector: { text: {} } },
   { name: 'icon', selector: { icon: {} } },
   { name: 'colspan', selector: { number: { min: 1, max: 6, mode: 'box' } } },
+  ACTIVE_WHEN_FIELD,
   ACTIONS_SECTION,
   {
     type: 'expandable',
@@ -90,6 +96,7 @@ export const BUTTON_FORM_KEYS = [
   'double_tap_action',
   'animation',
   'layout',
+  'active_when',
 ] as const;
 
 /**
@@ -119,6 +126,7 @@ export const buttonEditor: ItemEditor = {
       background: button.background ?? '',
       active_background: button.active_background ?? '',
       style: button.style ?? '',
+      active_when: button.active_when ?? '',
       layout: button.layout ?? defaults.layout ?? 'vertical',
       show_name: button.show_name ?? true,
       show_state: triStateToForm(button.show_state),
@@ -152,6 +160,7 @@ export const buttonEditor: ItemEditor = {
         background: value.background,
         active_background: value.active_background,
         style: value.style,
+        active_when: value.active_when,
         layout: value.layout,
         show_name: value.show_name,
         show_state: triStateFromForm(value.show_state),

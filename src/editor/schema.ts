@@ -75,6 +75,27 @@ export const PRESS_EFFECT_SELECT = select('press_effect', [
   { value: 'none', label: 'None' },
 ]);
 
+/**
+ * When the item counts as active, as a template. Every type has it; a text
+ * field, because it is a template or nothing.
+ */
+export const ACTIVE_WHEN_FIELD = { name: 'active_when', selector: { text: { multiline: true } } };
+
+/** always, only while active, or a template: a select that takes a value of its own. */
+export const SHOW_DRAWING_FIELD = {
+  name: 'show_drawing',
+  selector: {
+    select: {
+      mode: 'dropdown',
+      custom_value: true,
+      options: [
+        { value: 'always', label: 'Always' },
+        { value: 'active', label: 'While it is active' },
+      ],
+    },
+  },
+};
+
 /** Labels, so the form does not show raw config keys. */
 export const LABELS: Record<string, string> = {
   title: 'Title',
@@ -153,4 +174,6 @@ export const LABELS: Record<string, string> = {
   upper_bound: 'Upper bound (~ = soft)',
   min_bound_range: 'Minimum range',
   unit: 'Unit',
+  active_when: 'Active when (template)',
+  show_drawing: 'Show the drawing',
 };

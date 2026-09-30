@@ -12,6 +12,7 @@ import {
   actionFromForm,
   confirmationFromConfig,
 } from '../src/main.ts';
+import { confirmStep } from '../src/core/confirm.ts';
 
 const only = (button) => normalizeConfig({ buttons: [button] }).items[0];
 
@@ -88,4 +89,45 @@ test('what the editor writes means the same to the card', () => {
   const tap = actionFromForm(actionToForm(old.tap_action), true, confirmationFromConfig(old, 'tap'));
   const migrated = { entity: 'light.a', tap_action: tap };
   assert.deepEqual(only(migrated).confirmation, only(old).confirmation);
+});
+
+/* -- what a gesture does on an armed item ---------------------------------- */
+
+
+const guarded = only({
+  entity: 'lock.haustuer',
+  tap_action: { action: 'toggle', confirmation: true },
+  hold_action: { action: 'more-info', confirmation: true },
+  double_tap_action: { action: 'none' },
+});
+
+test('a gesture with confirmation arms the item instead of running', () => {
+  assert.deepEqual(confirmStep(guarded, null, 'hold'), { arm: 'hold' });
+  assert.deepEqual(confirmStep(guarded, null, 'tap'), { arm: 'tap' });
+});
+
+test('a tap confirms a hold - the hold action runs, not the tap action', () => {
+  assert.deepEqual(confirmStep(guarded, 'hold', 'tap'), { run: 'hold' });
+});
+
+test('a tap confirms a tap, as before', () => {
+  assert.deepEqual(confirmStep(guarded, 'tap', 'tap'), { run: 'tap' });
+});
+
+test('holding again does not confirm; it arms the hold anew', () => {
+  assert.deepEqual(confirmStep(guarded, 'hold', 'hold'), { arm: 'hold' });
+});
+
+test('a tap confirms even when the item has no tap action of its own', () => {
+  const holdOnly = only({
+    name: 'Alles aus',
+    tap_action: { action: 'none' },
+    hold_action: { action: 'call-service', service: 'light.turn_off', confirmation: true },
+  });
+  assert.deepEqual(confirmStep(holdOnly, null, 'tap'), null, 'unarmed, the tap does nothing');
+  assert.deepEqual(confirmStep(holdOnly, 'hold', 'tap'), { run: 'hold' });
+});
+
+test('without confirmation a gesture simply runs', () => {
+  assert.deepEqual(confirmStep(only({ entity: 'light.a' }), null, 'tap'), { run: 'tap' });
 });

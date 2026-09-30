@@ -10,6 +10,8 @@ import {
   PRESS_FLASH_MS,
 } from '../const';
 import { haptic, performAction } from '../core/actions';
+import { activeWhen } from '../core/active';
+import { actionFor, confirmStep } from '../core/confirm';
 import {
   computeCellHeight,
   computeColumns,
@@ -615,19 +617,26 @@ export class MultiButtonCard extends BaseElement {
       : null;
     const style = item.style ? resolve(item.style) : null;
 
+    // active_when, when set, decides alone - over Home Assistant's active
+    // semantics and over whatever the type would say.
+    const forced = activeWhen(item, resolve);
+
     const sync: SyncContext = {
       hass,
       stateObj,
-      active: (!ownActive && isActiveState(stateObj)) || flashing,
+      active: forced ?? ((!ownActive && isActiveState(stateObj)) || flashing),
       unavailable,
       missing,
       resolve,
       geometry: this._geometry,
       now: Date.now(),
       data: this._data[index],
+      activeWhen: forced,
     };
     const view = itemType ? itemType.view(item, sync) : null;
-    if (itemType && itemType.activeOf) sync.active = itemType.activeOf(view) || flashing;
+    if (forced === null && itemType && itemType.activeOf) {
+      sync.active = itemType.activeOf(view) || flashing;
+    }
     this._setTick(index, itemType && itemType.tickOf ? itemType.tickOf(view) : null);
     this._setRefresh(index, itemType && itemType.refreshOf ? itemType.refreshOf(view) : null);
 
@@ -930,27 +939,18 @@ export class MultiButtonCard extends BaseElement {
     const item = this._config && this._config.items[index];
     if (!item) return;
 
-    const action =
-      kind === 'hold'
-        ? item.hold_action
-        : kind === 'double_tap'
-          ? item.double_tap_action
-          : item.tap_action;
-
-    if (!action || action.action === 'none') return;
-
-    // Two-step confirmation instead of a modal: the first gesture arms the
-    // item, the same gesture again within the timeout runs the action. Only
-    // the same gesture confirms - a tap must not fire an armed hold action.
-    const confirmation = item.confirmation[kind];
-    if (confirmation && (this._armedIndex !== index || this._armedKind !== kind)) {
-      this._arm(index, kind, el);
+    // See core/confirm.ts: a gesture arms, a tap confirms whatever is armed.
+    const armed = this._armedIndex === index ? this._armedKind : null;
+    const step = confirmStep(item, armed, kind);
+    if (!step) return;
+    if ('arm' in step) {
+      this._arm(index, step.arm, el);
       return;
     }
     this._clearArmed();
 
-    haptic(el, kind === 'hold' ? 'medium' : 'light');
-    performAction(this._hass, action, el);
+    haptic(el, step.run === 'hold' ? 'medium' : 'light');
+    performAction(this._hass, actionFor(item, step.run), el);
   }
 
   private _arm(index: number, kind: Gesture, el: HTMLElement): void {

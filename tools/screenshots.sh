@@ -79,6 +79,9 @@ shoot progress "1268,372" progress 1
 # fixed, so the curves are the same on every run.
 shoot graph "1348,372" graph 1
 
+# show_drawing and active_when: the same card with the timer running and idle.
+shoot drawing "1028,340" drawing 1
+
 # No editor screenshot: tools/demo/ renders it against a stub, not against
 # Home Assistant's real ha-form, so an image would show a form that does not
 # exist anywhere. The scene stays for development (?scene=editor).

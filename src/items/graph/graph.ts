@@ -1,3 +1,4 @@
+import { drawingShown } from '../../core/active';
 import { formatState } from '../../core/state';
 import { hasTemplate } from '../../core/templates';
 import {
@@ -120,6 +121,7 @@ interface GraphView {
   paths: Array<{ line: string; fill: string }>;
   stops: Stop[] | null;
   refreshAt: number | null;
+  showDrawing: boolean;
 }
 
 /* --- configuration ------------------------------------------------------ */
@@ -387,6 +389,9 @@ function graphView(item: GraphItem, context: SyncContext): GraphView {
         : null,
     // The window moves on when the current bucket is full.
     refreshAt: window.end,
+    // A graph is never active by itself; active_when can make it so, and
+    // show_drawing: active then shows the graph only while it is.
+    showDrawing: drawingShown(item, resolve, context.activeWhen ?? false),
   };
 }
 
@@ -531,6 +536,7 @@ export const graphType: ItemType<GraphItem, GraphParts, GraphView> = {
         view.icon || (context.missing ? 'mdi:alert-circle-outline' : 'mdi:chart-line');
     }
 
+    parts.root.classList.toggle('drawing-off', !view.showDrawing);
     setText(parts.name, view.showName ? view.name : '');
     setText(parts.state, view.line);
     parts.root.setAttribute('aria-label', [view.name, view.line].filter(Boolean).join(', '));
