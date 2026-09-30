@@ -71,6 +71,10 @@ shoot colspan "1200,640" layout-modes 1
 # Visibility conditions reshaping the layout, with the measured result.
 shoot visibility "1400,500" visibility 1
 
+# The progress types next to a button, at three cell sizes. Its clock is
+# fixed, so the countdowns read the same on every run.
+shoot progress "1268,372" progress 1
+
 # No editor screenshot: tools/demo/ renders it against a stub, not against
 # Home Assistant's real ha-form, so an image would show a form that does not
 # exist anywhere. The scene stays for development (?scene=editor).

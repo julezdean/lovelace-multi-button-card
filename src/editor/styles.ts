@@ -152,6 +152,7 @@ ha-form { display: block; }
 .header .yaml-toggle { margin-left: auto; }
 
 .yaml { margin-top: 4px; }
+.type-form { display: block; margin-bottom: 8px; }
 .yaml ha-yaml-editor { display: block; }
 
 .header-title {

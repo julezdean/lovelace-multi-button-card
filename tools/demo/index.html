@@ -247,6 +247,21 @@
   <div class="frame" style="width: 760px"><div id="anim-host"></div></div>
 </div>
 
+<!-- Scene: the progress types next to buttons -->
+<div class="scene" id="scene-progress">
+  <div class="strip">
+    <div class="col" style="width: 480px"><p class="caption">Section column, 480 px</p><div id="progress-host"></div></div>
+    <div class="col" style="width: 360px"><p class="caption">Narrow column, 360 px</p><div id="progress-narrow"></div></div>
+    <div class="col" style="width: 340px"><p class="caption">Smallest cells, 3 columns</p><div id="progress-small"></div></div>
+  </div>
+</div>
+
+<!-- Scene: development only - a countdown on the real clock, sampled -->
+<div class="scene" id="scene-tick">
+  <div class="frame" style="width: 480px"><div id="tick-host"></div></div>
+  <pre id="tick-out"></pre>
+</div>
+
 <!-- Scene: landscape / wide wall panel -->
 <div class="scene" id="scene-landscape">
   <div class="frame" style="width: 900px"><div id="landscape-host"></div></div>
@@ -497,7 +512,14 @@ customElements.define('ha-icon-button', HaIconButtonStub);
  * Mock hass object
  * ------------------------------------------------------------------ */
 
-const entity = (id, state, attributes = {}) => [id, { entity_id: id, state, attributes }];
+const entity = (id, state, attributes = {}, extra = {}) => [id, { entity_id: id, state, attributes, ...extra }];
+
+/*
+ * The progress scene runs on a fixed clock, so the countdowns in its image say
+ * the same thing every time it is rendered. 18:25:00 local time.
+ */
+const NOW = new Date(2026, 8, 30, 18, 25, 0).getTime();
+const iso = (ms) => new Date(ms).toISOString();
 
 const hass = {
   states: Object.fromEntries([
@@ -521,7 +543,26 @@ const hass = {
     entity('fan.schlafzimmer', 'off', { friendly_name: 'Ventilator' }),
     entity('vacuum.staubsauger', 'docked', { friendly_name: 'Staubsauger' }),
     entity('sensor.kaputt', 'unavailable', { friendly_name: 'Defekter Sensor' }),
+    entity('timer.kaffee', 'active', {
+      friendly_name: 'Kaffee', duration: '0:05:00', remaining: '0:05:00',
+      finishes_at: iso(NOW + 155_000), last_transition: 'started',
+    }),
+    entity('timer.eier', 'paused', {
+      friendly_name: 'Eier', duration: '0:08:00', remaining: '0:03:20', last_transition: 'paused',
+    }),
+    entity('timer.tee', 'idle', { friendly_name: 'Tee', duration: '0:04:00', last_transition: 'cancelled' }),
+    entity('sensor.waschmaschine_restzeit', '23', {
+      friendly_name: 'Waschmaschine', unit_of_measurement: 'min', device_class: 'duration',
+    }, { last_changed: iso(NOW - 20_000), last_updated: iso(NOW - 20_000) }),
+    entity('sensor.handy_akku', '60', {
+      friendly_name: 'Handy', unit_of_measurement: '%', device_class: 'battery',
+    }),
+    entity('sensor.backofen_fertig', iso(NOW + 700_000), {
+      friendly_name: 'Backofen', device_class: 'timestamp',
+    }),
   ]),
+  language: 'de',
+  locale: { language: 'de', time_format: '24' },
   callService: (...args) => console.log('callService', ...args),
   formatEntityState: (stateObj) => {
     const unit = stateObj.attributes.unit_of_measurement;
@@ -570,6 +611,51 @@ const SCENES = {
       const host = document.createElement('div');
       col.appendChild(host);
       card({ buttons: BUTTON_POOL.slice(0, count).map((b) => ({ ...b })) }, host);
+    }
+  },
+
+  progress() {
+    // The fixed clock, before the first card reads it.
+    Date.now = () => NOW;
+    const items = [
+      { type: 'ring', entity: 'timer.kaffee', icon: 'mdi:coffee',
+        hold_action: { action: 'perform-action', perform_action: 'timer.cancel',
+          target: { entity_id: 'timer.kaffee' } } },
+      { type: 'bar', entity: 'sensor.waschmaschine_restzeit', icon: 'mdi:washing-machine',
+        progress: { window: '2h' } },
+      { name: 'Küche', icon: 'mdi:countertop', entity: 'light.kueche' },
+      { type: 'segments', entity: 'sensor.handy_akku', icon: 'mdi:cellphone', segments: 5 },
+      { type: 'ring', entity: 'timer.eier', icon: 'mdi:egg' },
+      { type: 'digits', entity: 'sensor.backofen_fertig', progress: { window: '30m' } },
+    ];
+    card({ title: 'Küche', items }, document.getElementById('progress-host'));
+    card({ items: items.slice(0, 4) }, document.getElementById('progress-narrow'));
+    card({ layout: { mode: 'grid', columns: 3 }, items }, document.getElementById('progress-small'));
+  },
+
+  tick() {
+    // Real clock: a timer ending in 10.4 s. The log shows what the ring says
+    // over time, and how often the card rewrote it.
+    const start = Date.now();
+    const timer = entity('timer.probe', 'active', {
+      friendly_name: 'Probe', duration: '0:00:20', remaining: '0:00:20',
+      finishes_at: new Date(start + 10_400).toISOString(),
+    })[1];
+    const probeHass = { ...hass, states: { ...hass.states, 'timer.probe': timer } };
+    const el = document.createElement('multi-button-card');
+    el.setConfig({ items: [{ type: 'ring', entity: 'timer.probe' }, { name: 'Küche', entity: 'light.kueche' }] });
+    el.hass = probeHass;
+    document.getElementById('tick-host').appendChild(el);
+    const value = () => el.shadowRoot.querySelector('.inner-value').textContent;
+    let writes = 0;
+    new MutationObserver((list) => { writes += list.length; })
+      .observe(el.shadowRoot.querySelector('.btn'), { subtree: true, characterData: true, childList: true });
+    const lines = [];
+    for (let t = 0; t <= 12_000; t += 500) {
+      setTimeout(() => {
+        lines.push(`${String(Date.now() - start).padStart(5)} ms  ${value()}  (${writes} DOM writes so far)`);
+        document.getElementById('tick-out').textContent = lines.join('\n');
+      }, t);
     }
   },
 
@@ -1207,6 +1293,11 @@ const name = new URLSearchParams(location.search).get('scene') || 'overview';
 document.getElementById(`scene-${name}`).classList.add('active');
 SCENES[name]();
 document.body.dataset.ready = 'true';
+// For tools/screenshots.sh: the body height at the current width, once the
+// layout has settled - what a window size in the recipe has to match.
+setTimeout(() => {
+  document.body.dataset.height = String(Math.ceil(document.body.getBoundingClientRect().height));
+}, 300);
 </script>
 </body>
 </html>

@@ -46,43 +46,6 @@ export const BUTTON_STYLES = `
 .icon.anim-blink   { animation-name: mbc-blink;   animation-timing-function: steps(1, end); }
 .icon.anim-wobble  { animation-name: mbc-wobble;  animation-timing-function: ease-in-out; }
 
-@keyframes mbc-pulse {
-  0%, 100% { transform: scale(1); }
-  50%      { transform: scale(calc(1 + 0.11 * var(--mbc-anim-i))); }
-}
-@keyframes mbc-breathe {
-  0%, 100% { transform: scale(1);                                   opacity: calc(1 - 0.28 * var(--mbc-anim-i)); }
-  50%      { transform: scale(calc(1 + 0.06 * var(--mbc-anim-i)));  opacity: 1; }
-}
-@keyframes mbc-bounce {
-  0%, 55%, 100% { transform: translateY(0); }
-  25%           { transform: translateY(calc(-14% * var(--mbc-anim-i))); }
-  40%           { transform: translateY(calc(-5% * var(--mbc-anim-i))); }
-}
-@keyframes mbc-spin {
-  from { transform: rotate(0deg); }
-  to   { transform: rotate(360deg); }
-}
-@keyframes mbc-shake {
-  0%, 100%      { transform: translateX(0); }
-  20%, 60%      { transform: translateX(calc(-9% * var(--mbc-anim-i))); }
-  40%, 80%      { transform: translateX(calc(9% * var(--mbc-anim-i))); }
-}
-@keyframes mbc-glow {
-  0%, 100% { filter: drop-shadow(0 0 0 transparent); }
-  50%      { filter: drop-shadow(0 0 calc(7px * var(--mbc-anim-i)) currentColor); }
-}
-@keyframes mbc-blink {
-  0%, 49%   { opacity: 1; }
-  50%, 100% { opacity: calc(1 - 0.75 * var(--mbc-anim-i)); }
-}
-@keyframes mbc-wobble {
-  0%, 100% { transform: rotate(0deg); }
-  25%      { transform: rotate(calc(-7deg * var(--mbc-anim-i))); }
-  75%      { transform: rotate(calc(7deg * var(--mbc-anim-i))); }
-}
-
-
 /* --- Reduced motion ----------------------------------------------------- */
 
 @media (prefers-reduced-motion: reduce) {

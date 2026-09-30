@@ -24,6 +24,9 @@ export interface HassEntity {
 export interface HomeAssistant {
   states: Record<string, HassEntity>;
   user?: { id: string; name?: string };
+  language?: string;
+  locale?: { language: string; time_format?: string; time_zone?: 'local' | 'server' };
+  config?: { time_zone: string };
   callService(domain: string, service: string, data?: Dict, target?: unknown): unknown;
   formatEntityState?: (stateObj: HassEntity, state?: string) => string;
 }

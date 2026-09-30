@@ -22,12 +22,23 @@ export interface SyncContext {
   unavailable: boolean;
   missing: boolean;
   resolve: Resolve;
+  /** The last layout pass's measurements. */
+  geometry: CellGeometry;
+  /** The moment this sync is for. */
+  now: number;
 }
 
 /** The measured geometry a layout pass hands to every cell. */
 export interface CellGeometry {
+  /** innerWidth / columns: a slot plus its share of the gaps. */
   columnWidth: number;
+  /** The width of one slot's track, without gaps. */
+  trackWidth: number;
   cellHeight: number;
+  /** The height a tall drawing gets in place of the icon. */
+  visualSize: number;
+  columns: number;
+  gap: number;
 }
 
 export interface NormalizeContext {
@@ -74,8 +85,16 @@ export interface ItemType<
   /** Fills the shell, once per config. */
   build(item: I, root: HTMLElement): P;
 
-  /** Whether the item counts as "on". Defaults to HA's active semantics. */
-  isActive?(item: I, stateObj: HassEntity | undefined): boolean;
+  /**
+   * Whether the item counts as "on", for a type that knows better than the
+   * entity's state - a countdown is on while it runs. Without it, Home
+   * Assistant's active semantics apply.
+   */
+  activeOf?(view: V): boolean;
+  /** ms within the second at which the view next changes, or null if it does not by itself. */
+  tickOf?(view: V): number | null;
+  /** Draws something taller than an icon, for which its row reserves room. */
+  tallVisual?: boolean;
 
   view(item: I, context: SyncContext): V;
   paint(parts: P, item: I, view: V, context: SyncContext): void;

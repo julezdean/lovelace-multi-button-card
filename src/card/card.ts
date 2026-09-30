@@ -22,7 +22,8 @@ import {
 import { isActiveState, isStateless, isUnavailable } from '../core/state';
 import { identity, renderTemplate, templateContext } from '../core/templates';
 import { collectMediaQueries, isVisible } from '../core/visibility';
-import type { CellParts, ItemType, SyncContext } from '../items/item-type';
+import { sharedTicker } from '../progress/ticker';
+import type { CellGeometry, CellParts, ItemType, SyncContext } from '../items/item-type';
 import { getItemType, itemTypes } from '../items/registry';
 import type { CardConfig, Dict, Gesture, HassEntity, HomeAssistant, ItemBase } from '../types';
 import { clamp, cssLength, domainOf, escapeHtml, toNumber } from '../utils';
@@ -40,6 +41,21 @@ const STYLES =
     .map((itemType) => itemType.styles)
     .join('\n') +
   CARD_STYLES_TAIL;
+
+/**
+ * The room a tall drawing - a ring, digits - gets in place of the icon: what
+ * the cell has left once its padding, the gap and one line each of name and
+ * state are taken. Never smaller than the icon it replaces, and never so large
+ * that a cell becomes all ring.
+ */
+export function computeVisualSize(cellHeight: number, iconSize: number, labelSize: number): number {
+  const padding = 20; // .btn padding, top and bottom
+  const gap = 8; // .btn gap between icon and labels
+  const name = labelSize * 1.2;
+  const state = (labelSize - 2) * 1.2 + 2; // line plus the labels' gap
+  const room = cellHeight - padding - gap - name - state;
+  return Math.round(clamp(room, iconSize, cellHeight * 0.62));
+}
 
 interface Cell {
   parts: CellParts;
@@ -102,6 +118,18 @@ export class MultiButtonCard extends BaseElement {
   private _flashUntil: number[] = [];
   private _flashTimers: Array<number | null> = [];
 
+  /** Items subscribed to the shared clock, by index. */
+  private _ticks = new Map<number, { phase: number; stop: () => void }>();
+  /** The last layout pass's measurements, which some types draw with. */
+  private _geometry: CellGeometry = {
+    columnWidth: 0,
+    trackWidth: 0,
+    cellHeight: 0,
+    visualSize: 0,
+    columns: 1,
+    gap: 0,
+  };
+
   constructor() {
     super();
     this.attachShadow({ mode: 'open' });
@@ -135,6 +163,7 @@ export class MultiButtonCard extends BaseElement {
 
     this._signatures = [];
     this._clearFlashes();
+    this._clearTicks();
     this._lastWidth = 0;
     this._lastColumns = 0;
     this._build();
@@ -225,6 +254,8 @@ export class MultiButtonCard extends BaseElement {
     if (this._resizeObserver) this._resizeObserver.observe(this);
     // First measurement before the observer's initial callback arrives.
     this._onWidth(this.clientWidth);
+    // Ticks stop while disconnected; a card moved in the DOM starts them again.
+    if (this._hass) this._sync(true);
   }
 
   disconnectedCallback(): void {
@@ -232,6 +263,7 @@ export class MultiButtonCard extends BaseElement {
     if (this._resizeObserver) this._resizeObserver.disconnect();
     this._clearArmed();
     this._clearFlashes();
+    this._clearTicks();
     this._gestures.forEach((gesture) => this._cancelGesture(gesture));
     this._gestures.clear();
   }
@@ -306,6 +338,7 @@ export class MultiButtonCard extends BaseElement {
     el.className = 'btn';
     el.type = 'button';
     el.dataset.index = String(index);
+    el.dataset.type = item.type;
     // Attributes that make a single item addressable from outside. card-mod
     // injects its styles into this shadow root (it targets the card element,
     // not an ha-card), so a selector like
@@ -435,14 +468,12 @@ export class MultiButtonCard extends BaseElement {
       `${toNumber(layout.min_button_size, DEFAULT_LAYOUT.min_button_size as number)}px`,
     );
     // Icon and label scale with the cell, within sane bounds.
-    this._gridEl.style.setProperty(
-      '--mbc-icon-size',
-      `${clamp(Math.round(cellHeight * 0.3), 24, 44)}px`,
-    );
-    this._gridEl.style.setProperty(
-      '--mbc-label-size',
-      `${clamp(Math.round(cellHeight * 0.115), 12, 17)}px`,
-    );
+    const iconSize = clamp(Math.round(cellHeight * 0.3), 24, 44);
+    const labelSize = clamp(Math.round(cellHeight * 0.115), 12, 17);
+    this._gridEl.style.setProperty('--mbc-icon-size', `${iconSize}px`);
+    this._gridEl.style.setProperty('--mbc-label-size', `${labelSize}px`);
+    const visualSize = computeVisualSize(cellHeight, iconSize, labelSize);
+    this._gridEl.style.setProperty('--mbc-visual-size', `${visualSize}px`);
 
     // Rebuild the row containers and re-home the (already existing) cells.
     const rowElements: HTMLElement[] = [];
@@ -461,6 +492,12 @@ export class MultiButtonCard extends BaseElement {
       // count in a strict grid - there the last row stays left-aligned in the
       // same raster rather than stretching to fill the width. minmax(0, 1fr)
       // rather than 1fr so a long label cannot push a track past its share.
+      // A ring is taller than an icon. Every cell of its row gives its icon
+      // the same room, so the names still line up across the row.
+      rowEl.classList.toggle(
+        'reserve-visual',
+        row.some((slot) => !!this._cells[visible[slot]]?.itemType?.tallVisual),
+      );
       const rowWeight = row.reduce((sum, slot) => sum + Math.min(weights[slot], columns), 0);
       const tracks = strict ? columns : rowWeight;
       rowEl.style.gridTemplateColumns = `repeat(${tracks}, minmax(0, 1fr))`;
@@ -472,13 +509,32 @@ export class MultiButtonCard extends BaseElement {
 
     // Cell geometry decides the inner arrangement - deterministic, so no jitter.
     const columnWidth = columns > 0 ? innerWidth / columns : innerWidth;
+    // columnWidth includes a share of the gaps - the icon-only threshold has
+    // always been measured that way; trackWidth is what one slot really is.
+    const gap = toNumber(layout.gap, 12);
+    this._geometry = {
+      columnWidth,
+      trackWidth: columns > 0 ? (innerWidth - gap * (columns - 1)) / columns : innerWidth,
+      cellHeight,
+      visualSize,
+      columns,
+      gap,
+    };
     this._cells.forEach((cell, index) => {
       const item = items[index];
       if (item && cell.itemType && cell.itemType.arrange) {
-        cell.itemType.arrange(cell.parts, item, { columnWidth, cellHeight });
+        cell.itemType.arrange(cell.parts, item, this._geometry);
       }
     });
     this._lastVisibleKey = visible.join(',');
+    // Some types decide what to draw by the size they get - whether a value
+    // still fits inside a ring. Their views changed with the geometry.
+    if (this._hass && this._cells.some((cell) => cell.itemType?.tallVisual)) {
+      visible.forEach((index) => {
+        if (this._cells[index]?.itemType?.tallVisual) this._syncItem(index);
+      });
+      this._updateStateReservation();
+    }
   }
 
   /* --- State sync ------------------------------------------------------- */
@@ -486,7 +542,6 @@ export class MultiButtonCard extends BaseElement {
   private _sync(force = false): void {
     if (!this._config || !this._hass || this._cells.length === 0) return;
     const hass = this._hass;
-    const { variables } = this._config;
 
     // Visibility first: it decides which items the layout has to place, so a
     // change here has to re-run the layout before anything is painted.
@@ -504,56 +559,102 @@ export class MultiButtonCard extends BaseElement {
       this._applyLayout(this._lastWidth || this.clientWidth);
     }
 
-    this._config.items.forEach((item, index) => {
-      if (!visible.includes(index)) return;
-      const cell = this._cells[index];
-      if (!cell) return;
-
-      const stateObj = item.entity ? hass.states[item.entity] : undefined;
-      const missing = !!item.entity && !stateObj;
-      const unavailable = !!item.entity && isUnavailable(stateObj);
-      const itemType = cell.itemType;
-      const activeState =
-        itemType && itemType.isActive ? itemType.isActive(item, stateObj) : isActiveState(stateObj);
-      const active = activeState || this._flashing(index, stateObj);
-
-      // One context per templated item per update; items without templates
-      // never build one.
-      const context = item.hasTemplates ? templateContext(hass, stateObj, variables) : null;
-      const resolve = context ? (value: unknown) => renderTemplate(value, context) : identity;
-
-      const colours = context
-        ? {
-            background: resolve(item.background),
-            active_background: resolve(item.active_background),
-            active_color: resolve(item.active_color),
-          }
-        : null;
-      const style = item.style ? resolve(item.style) : null;
-
-      const sync: SyncContext = { hass, stateObj, active, unavailable, missing, resolve };
-      const view = itemType ? itemType.view(item, sync) : null;
-
-      const signature = [
-        active ? 1 : 0,
-        unavailable ? 1 : 0,
-        missing ? 1 : 0,
-        style || '',
-        // Template results belong in the signature, so a card whose templates
-        // keep returning the same thing still writes nothing to the DOM.
-        colours ? JSON.stringify(colours) : '',
-        JSON.stringify(view),
-      ].join('\u001f');
-
-      if (!force && this._signatures[index] === signature) return;
-      this._signatures[index] = signature;
-
-      this._renderCell(cell, item, sync, colours, style);
-      if (itemType) itemType.paint(cell.parts, item, view, sync);
-      else this._renderUnknown(cell, item);
+    visible.forEach((index) => this._syncItem(index, force));
+    // A hidden item does not tick.
+    this._ticks.forEach((_, index) => {
+      if (!visible.includes(index)) this._setTick(index, null);
     });
 
     this._updateStateReservation();
+  }
+
+  /** Brings one item up to date - on a hass update, or on its own tick. */
+  private _syncItem(index: number, force = false): void {
+    const config = this._config;
+    const hass = this._hass;
+    const item = config && config.items[index];
+    const cell = this._cells[index];
+    if (!config || !hass || !item || !cell) return;
+
+    const stateObj = item.entity ? hass.states[item.entity] : undefined;
+    const missing = !!item.entity && !stateObj;
+    const unavailable = !!item.entity && isUnavailable(stateObj);
+    const itemType = cell.itemType;
+    const flashing = this._flashing(index, stateObj);
+    // A type that knows its own "on" (a countdown that runs) says so from
+    // its view; everything else follows Home Assistant's active semantics.
+    const ownActive = !!(itemType && itemType.activeOf);
+
+    // One context per templated item per update; items without templates
+    // never build one.
+    const context = item.hasTemplates ? templateContext(hass, stateObj, config.variables) : null;
+    const resolve = context ? (value: unknown) => renderTemplate(value, context) : identity;
+
+    const colours = context
+      ? {
+          background: resolve(item.background),
+          active_background: resolve(item.active_background),
+          active_color: resolve(item.active_color),
+        }
+      : null;
+    const style = item.style ? resolve(item.style) : null;
+
+    const sync: SyncContext = {
+      hass,
+      stateObj,
+      active: (!ownActive && isActiveState(stateObj)) || flashing,
+      unavailable,
+      missing,
+      resolve,
+      geometry: this._geometry,
+      now: Date.now(),
+    };
+    const view = itemType ? itemType.view(item, sync) : null;
+    if (itemType && itemType.activeOf) sync.active = itemType.activeOf(view) || flashing;
+    this._setTick(index, itemType && itemType.tickOf ? itemType.tickOf(view) : null);
+
+    const signature = [
+      sync.active ? 1 : 0,
+      unavailable ? 1 : 0,
+      missing ? 1 : 0,
+      style || '',
+      // Template results belong in the signature, so a card whose templates
+      // keep returning the same thing still writes nothing to the DOM.
+      colours ? JSON.stringify(colours) : '',
+      JSON.stringify(view),
+    ].join('\u001f');
+
+    if (!force && this._signatures[index] === signature) return;
+    this._signatures[index] = signature;
+
+    this._renderCell(cell, item, sync, colours, style);
+    if (itemType) itemType.paint(cell.parts, item, view, sync);
+    else this._renderUnknown(cell, item);
+  }
+
+  /**
+   * An item whose view changes with time - a running countdown - has its own
+   * subscription to the shared clock, at the millisecond within the second
+   * where its digits flip. Only that item is brought up to date on a tick.
+   */
+  private _setTick(index: number, phase: number | null): void {
+    const current = this._ticks.get(index);
+    if (current && current.phase === phase) return;
+    if (current) {
+      current.stop();
+      this._ticks.delete(index);
+    }
+    if (phase === null || !this.isConnected) return;
+    const stop = sharedTicker.subscribe(() => {
+      this._syncItem(index);
+      this._updateStateReservation();
+    }, phase);
+    this._ticks.set(index, { phase, stop });
+  }
+
+  private _clearTicks(): void {
+    this._ticks.forEach(({ stop }) => stop());
+    this._ticks.clear();
   }
 
   /**

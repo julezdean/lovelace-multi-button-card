@@ -107,6 +107,35 @@ const cardSchema = (mode: string) => [
   },
 ];
 
+/**
+ * What every type reads, whatever it is: the item itself and its cell. These
+ * survive a type switch; a type's own options survive only if the new type
+ * has them too.
+ */
+const SHARED_KEYS = [
+  'entity',
+  'name',
+  'icon',
+  'label',
+  'show_name',
+  'colspan',
+  'size',
+  'visibility',
+  'conditions',
+  'tap_action',
+  'hold_action',
+  'double_tap_action',
+  'confirmation',
+  'style',
+  'radius',
+  'background',
+  'active_background',
+  'color',
+  'active_color',
+  'label_size',
+  'press_effect',
+];
+
 function typeOf(item: Dict): ItemType | undefined {
   return getItemType(item.type === undefined ? DEFAULT_TYPE : String(item.type));
 }
@@ -124,6 +153,12 @@ export class MultiButtonCardEditor extends BaseElement {
   private _choosing = false;
   private _form: (HTMLElement & { data?: unknown; hass?: unknown }) | null = null;
   private _renderedPage: string | undefined;
+  /**
+   * Per item, the options a type switch set aside: switching a ring to a bar
+   * and back must not lose what only the ring had. Kept while the editor is
+   * open - the saved config carries only what the current type reads.
+   */
+  private _stash = new Map<number, Dict>();
 
   constructor() {
     super();
@@ -162,7 +197,7 @@ export class MultiButtonCardEditor extends BaseElement {
     const page =
       this._openItem === null
         ? `card:${this._layoutMode()}:${this._choosing ? 'choose' : 'list'}`
-        : `item:${this._openItem}:${this._yamlMode ? 'yaml' : 'form'}`;
+        : `item:${this._openItem}:${this._openType()}:${this._yamlMode ? 'yaml' : 'form'}`;
     if (page !== this._renderedPage) {
       this._renderedPage = page;
       this._buildPage();
@@ -362,6 +397,29 @@ export class MultiButtonCardEditor extends BaseElement {
 
     header.append(back, title, yamlToggle);
     root.appendChild(header);
+
+    // The type decides which options the page shows, so it comes first.
+    if (itemTypes().length > 1 && !this._yamlMode) {
+      const typeForm = this._createForm(
+        [
+          {
+            name: 'type',
+            selector: {
+              select: {
+                mode: 'dropdown',
+                options: itemTypes().map((option) => ({ value: option.type, label: option.label })),
+              },
+            },
+          },
+        ],
+        { type: itemType ? itemType.type : String(item.type) },
+        (value) => {
+          if (typeof value.type === 'string') this._switchType(index, value.type);
+        },
+      );
+      typeForm.classList.add('type-form');
+      root.appendChild(typeForm);
+    }
 
     // An item of a type this version does not know has no form - only its
     // YAML, which is kept as written.
@@ -574,6 +632,44 @@ export class MultiButtonCardEditor extends BaseElement {
     this._render();
   }
 
+  private _openType(): string {
+    const item = (this._config as EditorConfig).items[this._openItem as number] || {};
+    return item.type === undefined ? DEFAULT_TYPE : String(item.type);
+  }
+
+  /**
+   * Another type for an existing item. What both types read - the entity,
+   * the name, the actions, the cell - carries over; what only the old one
+   * reads is set aside, and comes back if the item is switched back.
+   */
+  private _switchType(index: number, typeName: string): void {
+    const config = this._config as EditorConfig;
+    const previous = config.items[index] || {};
+    const target = getItemType(typeName);
+    if (!target || this._openType() === typeName) return;
+
+    const keep = new Set<string>([...SHARED_KEYS, ...target.editor.formKeys]);
+    const stash = { ...(this._stash.get(index) || {}) };
+    const next: Dict = typeName === DEFAULT_TYPE ? {} : { type: typeName };
+    Object.entries(previous).forEach(([key, value]) => {
+      if (key === 'type') return;
+      if (keep.has(key)) next[key] = value;
+      else stash[key] = value;
+    });
+    Object.entries(stash).forEach(([key, value]) => {
+      if (keep.has(key) && next[key] === undefined) {
+        next[key] = value;
+        delete stash[key];
+      }
+    });
+    this._stash.set(index, stash);
+
+    const items = [...config.items];
+    items[index] = next;
+    this._commit({ ...config, items });
+    this._render();
+  }
+
   private _addItem(itemType: ItemType): void {
     const config = this._config as EditorConfig;
     const created = itemType.editor.create(config.items.length);
@@ -589,6 +685,8 @@ export class MultiButtonCardEditor extends BaseElement {
   private _deleteItem(index: number): void {
     const config = this._config as EditorConfig;
     const items = config.items.filter((_, i) => i !== index);
+    // Set-aside options belong to positions, and positions just moved.
+    this._stash.clear();
     this._commit({ ...config, items });
     this._renderedPage = undefined; // the list changed, rebuild it
     this._render();
@@ -600,6 +698,7 @@ export class MultiButtonCardEditor extends BaseElement {
     if (target < 0 || target >= config.items.length) return;
     const items = [...config.items];
     [items[index], items[target]] = [items[target], items[index]];
+    this._stash.clear();
     this._commit({ ...config, items });
     this._renderedPage = undefined;
     this._render();

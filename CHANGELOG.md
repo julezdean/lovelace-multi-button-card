@@ -6,6 +6,34 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [1.9.0-beta.7] - 2026-09-30
+
+Four new item types that draw a proportion - a timer running down, the time a
+machine has left, a battery - in the same cell as a button.
+
+### Added
+
+- `ring`, `bar`, `segments` and `digits`. They read a `timer`, a timestamp, a
+  sensor reporting the time left, a percentage, a number on a scale, an
+  attribute or a `[[[ template ]]]`, and share every option but the drawing:
+  `progress` (`window`, `start`, `end`, `min`, `max`, `direction`),
+  `format`, `on_complete`, `colors` with thresholds or a gradient, `label`
+  with `{{placeholders}}`, and `animation` with two more moments,
+  `finishing` and `finished`. Adapted from the countdown and progress card
+  `lovelace-advanced-countdown-card`.
+- A sensor that reports the time left as a number (`23` min) counts down on
+  its own between reports, in the sensor's own unit, and draws its proportion
+  from `progress.window` - a span or an entity holding one.
+- A running countdown ticks once a second on one clock shared by every card,
+  at the millisecond its digits change, and only the item that ticks is
+  redrawn. Nothing ticks while the tab is hidden or once a countdown is over.
+- A row holding a ring or digits gives every cell the same room above the
+  name, so names still line up across the row.
+- The editor asks for the type under **+ Add item**, and an item's page can
+  change it. What only the old type had is kept while the editor is open.
+- Defaults blocks per type: `ring:`, `bar:`, `segments:`, `digits:`.
+- Each cell carries `data-type`, for card_mod.
+
 ### Fixed
 
 - `variables` in a template was always empty. The card's `variables:` block,

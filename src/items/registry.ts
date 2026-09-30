@@ -1,5 +1,6 @@
 import type { ItemType } from './item-type';
 import { buttonType } from './button/button';
+import { barType, digitsType, ringType, segmentsType } from './progress/progress';
 
 /** An item without `type:` is a button - every config from before types. */
 export const DEFAULT_TYPE = 'button';
@@ -9,7 +10,7 @@ export const DEFAULT_TYPE = 'button';
  * generic parameters are erased here: past this point the card only ever
  * hands a type the items it normalised itself.
  */
-const TYPES = [buttonType] as unknown as ItemType[];
+const TYPES = [buttonType, ringType, barType, segmentsType, digitsType] as unknown as ItemType[];
 
 const BY_NAME = new Map(TYPES.map((itemType) => [itemType.type, itemType]));
 

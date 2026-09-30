@@ -36,6 +36,7 @@ orphan rows and no layout jumps.
   - [Actions](#actions)
   - [Icons](#icons)
   - [Animations](#animations)
+  - [Progress: `ring`, `bar`, `segments`, `digits`](#progress-ring-bar-segments-digits)
 - [The visual editor](#the-visual-editor)
 - [Examples](#examples)
 - [Behaviour details](#behaviour-details)
@@ -69,7 +70,7 @@ Adding it by hand instead:
    - Type: **JavaScript module**
 3. Reload the browser
 
-Confirm it loaded: the browser console prints `multi-button-card v1.9.0-beta.6` on
+Confirm it loaded: the browser console prints `multi-button-card v1.9.0-beta.7` on
 startup.
 
 ---
@@ -273,6 +274,12 @@ items:
 | `type` | |
 |---|---|
 | `button` *(default)* | An icon, a name and an optional state line — everything described below |
+| `ring` | A countdown or a value as a ring where the icon would be, the time inside it |
+| `bar` | A button's icon and name, the value in the state line, a bar along the bottom |
+| `segments` | The same with the bar in steps — five for a battery, twelve for an hour |
+| `digits` | The time or value in large digits where the icon would be |
+
+The last four are described under [Progress](#progress-ring-bar-segments-digits).
 
 Some options belong to the item rather than to its type, and every type has
 them: `entity`, `colspan`, `visibility`, the three actions, `style`, and the
@@ -647,14 +654,190 @@ Animations are pure CSS and honour `prefers-reduced-motion: reduce`.
 
 ---
 
+### Progress: `ring`, `bar`, `segments`, `digits`
+
+Four types draw a proportion: a timer running down, the time a washing machine
+has left, a battery, a value between two bounds. They read the same sources and
+take the same options; they differ only in the drawing.
+
+![Progress types next to a button](docs/images/progress.png)
+
+```yaml
+items:
+  - type: ring
+    entity: timer.kaffee
+    hold_action:
+      action: perform-action
+      perform_action: timer.cancel
+      target: { entity_id: timer.kaffee }
+  - type: bar
+    entity: sensor.waschmaschine_restzeit    # "23" min
+    progress: { window: 2h }
+  - type: segments
+    entity: sensor.handy_akku
+    segments: 5
+  - type: digits
+    entity: sensor.backofen_fertig           # a timestamp
+```
+
+They sit in the same cell as a button and follow its rules: the fill is the
+accent while the item runs and the dimmed text colour while it does not, the
+outline lights up the same way, and the name sits where a button's name sits.
+A row holding a ring or digits gives every cell the same room above the name,
+so names still line up across the row. A tap opens more-info; hold does nothing
+until you say what it should do.
+
+**What counts as on.** A timer that runs or is paused — the same as a button on
+that timer. Idle and finished are off. A value is on while it is above its
+minimum.
+
+#### Where the value comes from
+
+`source` picks how the entity is read; `auto` (the default) works it out:
+
+| `source` | Reads | Detected when |
+|---|---|---|
+| `timer` | a `timer` entity: running, paused, idle, finished | the entity is a `timer` |
+| `timestamp` | a point in time — the item counts down to it | `device_class: timestamp`, `input_datetime`, or the state is a date-time |
+| `remaining` | the time left as a number, `23` min | `device_class: duration`, or a unit of s, min, h or d |
+| `percentage` | a value on 0–100 | unit `%`, or a battery, humidity or moisture class |
+| `numeric` | a value on `progress.min`–`max`, or on the range the entity declares | the state is a number |
+| `attribute` | one attribute, read as a time or a number | set `source.attribute` |
+| `template` | what `source.template` returns | — |
+
+A **remaining-time sensor** counts from the moment it reported: 23 minutes
+reported 90 seconds ago reads 22. It counts down on its own between reports,
+in the sensor's own unit — a sensor that knows minutes shows minutes, because
+the seconds would be invented. A new report moves the end; that is the machine
+recalculating, not jitter.
+
+A **template** returns a number, a timestamp, or a mapping for the cases that
+need more than one number:
+
+```yaml
+source:
+  type: template
+  template: |
+    [[[
+      const a = states['sensor.spuelmaschine'].attributes;
+      return { end: a.fertig_um, duration: a.programmdauer * 60, status: a.pausiert ? 'paused' : 'active' };
+    ]]]
+```
+
+Keys: `end`, `start`, `duration` (seconds or `H:MM:SS`), `remaining`,
+`status` (`active`, `paused`, `idle`, `finished`), `value`, `min`, `max`,
+`unit`, `name`.
+
+`source` can also be a mapping with `attribute`, `map` (state → value, before
+it is read) and `naive_timezone` (`server` or `browser`, for timestamps without
+an offset).
+
+#### How full it is
+
+A timer knows its duration. A timestamp or a remaining-time sensor only knows
+when it ends, so it draws a full, muted ring until it is told the span:
+
+| `progress:` | |
+|---|---|
+| `window` | the whole span: `2h`, `90m`, `1d 2h`, seconds, or `{ entity, attribute }` holding a duration |
+| `start` / `end` | a point in time, or `{ entity, attribute }` |
+| `min` / `max` | the range of a value |
+| `direction` | `remaining` *(default)*: empties as time runs out; `elapsed`: fills |
+
+#### What it shows
+
+| Option | Default | |
+|---|---|---|
+| `format` | `auto` | `auto`, `MM:SS`, `HH:MM:SS`, `DD:HH:MM:SS`, `SS`, `short` (2h 05m), `long`; or a mapping with `style`, `show_seconds` (and days/hours/minutes), `largest_units`, `decimals` |
+| `on_complete` | `show_zero` | `show_zero`, `show_text` (with `text`), `count_up` — the time since it ended |
+| `label` | — | The state line, with `{{value}}`, `{{status}}`, `{{end_time}}`, `{{percentage}}`, `{{name}}`, `{{state}}`, `{{attributes.x}}`; or a template |
+| `status_labels` | — | Your own words for `active`, `paused`, `idle`, `finished` |
+| `name`, `icon`, `show_name` | from the entity | As on a button |
+
+The state line of a ring or digits says how it is going — *Running*, *Paused*,
+or when a timestamp ends. On a bar it shows the value. Status texts come in
+English and German, following Home Assistant's language.
+
+Hiding an item when it is not running is a job for
+[`visibility`](#visibility), not an option of the type:
+
+```yaml
+visibility:
+  - condition: state
+    entity: timer.kaffee
+    state_not: idle
+```
+
+A timestamp is the exception: when its time passes, nothing about the entity
+changes, so no condition can see it. The item stays and shows its
+`on_complete`.
+
+#### The drawing
+
+| Option | Types | Default | |
+|---|---|---|---|
+| `inner` | ring | `auto` | `value`, `percentage`, `icon`, `none`. `auto` shows the value while it can be read at the ring's size and the icon otherwise, with the value in the state line |
+| `thickness` | ring, bar, segments | ring `10`, bar `4` | ring: percent of the diameter; bar and segments: px, at most 6 — the bar lives in the cell's bottom padding |
+| `arc` | ring | `360` | Degrees drawn; below 360 it is a gauge open at the bottom |
+| `segments` | segments | `10` | How many |
+| `tiles` | digits | `true` | Each group of digits on its own tile |
+| `rounded`, `track` | ring, bar, segments | `true` | Rounded ends; the unfilled track |
+| `gradient` | ring, bar, segments | `false` | The fill runs from the accent to `colors.secondary` |
+
+#### Colour and animation
+
+The fill is the accent — `active_color`, as on a button. `colors` changes it
+with the state of the countdown:
+
+```yaml
+colors:
+  basis: remaining_seconds      # progress (default) | remaining_seconds | value
+  thresholds:
+    - { value: 0, color: red }
+    - { value: 30, color: amber }
+    - { value: 120, color: green }
+```
+
+`colors.mode: gradient` with `start` and `end` blends along the course instead;
+`colors.track` sets the track. Home Assistant's colour names (`red`, `amber`, …)
+and theme variables work alongside any CSS colour.
+
+`animation` is a button's animation on the drawing, with two more moments for
+`when`: `finishing` (the last `finishing_seconds`, default 60) and `finished`.
+
+```yaml
+animation: { type: pulse, when: finishing }
+```
+
+#### Defaults per type
+
+Like `button:`, each type has a defaults block: `ring:`, `bar:`, `segments:`,
+`digits:`.
+
+```yaml
+ring:
+  thickness: 14
+  colors: { thresholds: [{ value: 0, color: red }, { value: 60, color: green }], basis: remaining_seconds }
+```
+
+---
+
 ## The visual editor
 
 The card ships an editor, so it can be configured by clicking rather than by
 writing YAML. Card options - layout, appearance, item and button defaults,
 animation - are collapsible sections. The items are a list below them: click
 one to open its own page with the options its type has - for a button entity,
-icon, name, width, the three actions and its animation. **+ Add item** adds
-one, and the list reorders and deletes them.
+icon, name, width, the three actions and its animation. **+ Add item** asks
+which type to add, and the list reorders and deletes them.
+
+The type of an item can be changed on its page. What both types read - entity,
+name, icon, actions, the cell - carries over. What only the old type has is
+set aside while the editor is open, so switching a ring to a bar and back does
+not lose it; the saved config carries only what the current type reads.
+
+Thresholds, a `window` read from an entity, and `colors` stay YAML-only; the
+form keeps them as they are when you edit other fields.
 
 Anything left at its default is not written to the config, so opening the
 editor on a three-line YAML card does not turn it into fifty lines.
@@ -669,13 +852,14 @@ better:
 
 ## Examples
 
-Three complete configurations are in [`examples/`](examples/):
+Complete configurations are in [`examples/`](examples/):
 
 | File | What it shows |
 |---|---|
 | [`small-wallmount.yaml`](examples/small-wallmount.yaml) | Three buttons, minimal configuration |
 | [`large-dashboard.yaml`](examples/large-dashboard.yaml) | Ten buttons, tuned layout, confirmation |
 | [`mixed-dashboard.yaml`](examples/mixed-dashboard.yaml) | Entities, navigation, service calls, animations |
+| [`kitchen-timers.yaml`](examples/kitchen-timers.yaml) | The four progress types with a button: a timer, a machine's time left, a battery, a timestamp |
 
 ---
 
@@ -745,7 +929,9 @@ text), `theme` and `opaque`
 one), `constrained` (how the
 card behaves in a sections grid cell), `colspan` (both layout modes with the
 measured widths printed, so the span arithmetic is checkable), `visibility`, `compact`, `animations`,
-`editor`.
+`editor`, `progress` (the four progress types at three cell sizes, on a fixed
+clock) and `tick` (a countdown on the real clock, with a log of what it shows
+and how often it writes to the DOM).
 
 The `editor` scene is for development only and is deliberately not
 screenshotted: it renders against a stub, not against Home Assistant's real
