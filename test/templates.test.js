@@ -101,6 +101,13 @@ test('entity and colspan are not template fields', () => {
   assert.equal(config.items[0].hasTemplates, false);
 });
 
+test('the card keeps its variables block for the templates', () => {
+  // normalizeConfig used to drop it, so `variables` was always {} in a
+  // template although the README promised the card's block.
+  assert.deepEqual(normalizeConfig({ variables: { x: 7 }, items: [{}] }).variables, { x: 7 });
+  assert.deepEqual(normalizeConfig({ items: [{}] }).variables, {});
+});
+
 test('an entity-less button gets an undefined entity, not an error', () => {
   const context = templateContext(hass, undefined);
   assert.equal(renderTemplate('[[[ return entity === undefined ]]]', context), true);

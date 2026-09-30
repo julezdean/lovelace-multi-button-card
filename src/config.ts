@@ -93,6 +93,7 @@ export function normalizeConfig(raw: unknown): CardConfig {
     item,
     defaults,
     animation,
+    variables: isDict(raw.variables) ? raw.variables : {},
     items,
   };
 }

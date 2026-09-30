@@ -6,6 +6,11 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- `variables` in a template was always empty. The card's `variables:` block,
+  which the README describes, never reached the templates.
+
 ## [1.9.0-beta.6] - 2026-09-30
 
 The groundwork for other kinds of item than buttons. Nothing looks or behaves

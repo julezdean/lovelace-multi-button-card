@@ -486,6 +486,7 @@ export class MultiButtonCard extends BaseElement {
   private _sync(force = false): void {
     if (!this._config || !this._hass || this._cells.length === 0) return;
     const hass = this._hass;
+    const { variables } = this._config;
 
     // Visibility first: it decides which items the layout has to place, so a
     // change here has to re-run the layout before anything is painted.
@@ -518,13 +519,7 @@ export class MultiButtonCard extends BaseElement {
 
       // One context per templated item per update; items without templates
       // never build one.
-      const context = item.hasTemplates
-        ? templateContext(
-            hass,
-            stateObj,
-            (this._config as CardConfig & { variables?: Dict }).variables,
-          )
-        : null;
+      const context = item.hasTemplates ? templateContext(hass, stateObj, variables) : null;
       const resolve = context ? (value: unknown) => renderTemplate(value, context) : identity;
 
       const colours = context

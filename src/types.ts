@@ -133,5 +133,7 @@ export interface CardConfig<I extends ItemBase = ItemBase> {
   /** Defaults blocks keyed by item type, e.g. `button:`. */
   defaults: Record<string, Dict>;
   animation: AnimationConfig;
+  /** Values every template can read as `variables`. */
+  variables: Dict;
   items: I[];
 }
